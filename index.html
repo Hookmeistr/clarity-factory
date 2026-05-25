@@ -742,7 +742,7 @@
 // STATE
 // ═══════════════════════════════════════════
 let G = {
-  key: null,
+  key: localStorage.getItem('cf_api_key') || null,
   topic: null,
   conversation: [],
   masterSource: null,
@@ -872,6 +872,7 @@ function doKey() {
     return;
   }
   G.key = v;
+  localStorage.setItem('cf_api_key', v);
   hideErr('key-err');
   document.getElementById('hdr-key-status').textContent = v.slice(0, 14) + '…';
   showScreen('topic');
@@ -1353,6 +1354,15 @@ function hideErr(id) { document.getElementById(id).style.display = 'none'; }
 
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 function slug(str) { return str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+// Init: restore saved key on page load
+(function initSavedKey() {
+  const saved = localStorage.getItem('cf_api_key');
+  if (saved) {
+    document.getElementById('key-input').value = saved;
+    document.getElementById('hdr-key-status').textContent = saved.slice(0, 14) + '…';
+  }
+})();
+
 function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); return d.toISOString().slice(0,10); }
 </script>
 
