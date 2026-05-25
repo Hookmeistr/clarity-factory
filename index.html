@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Clarity Factory</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #0e100d;
+      --surface: #161814;
+      --surface2: #1d1f1b;
+      --surface3: #232620;
+      --border: #2a2d27;
+      --border2: #353830;
+      --ember: #e0601a;
+      --ember-hi: #f07030;
+      --ember-lo: #8a3c10;
+      --ember-glow: rgba(224, 96, 26, 0.12);
+      --gold: #b88520;
+      --gold-dim: #7a5810;
+      --green: #3d8050;
+      --green-dim: #1e4028;
+      --text: #c8c6be;
+      --text-dim: #7a7870;
+      --text-bright: #ece9e2;
+      --text-faint: #4a4a44;
+      --ff-display: 'Cinzel', serif;
+      --ff-body: 'Lora', serif;
+      --ff-mono: 'JetBrains Mono', monospace;
+      --r: 3px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--ff-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── HEADER ── */
+    header {
+      width: 100%;
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to bottom, #111310, var(--bg));
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      gap: 0.8rem;
+    }
+
+    .brand-name {
+      font-family: var(--ff-display);
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--ember);
+      letter-spacing: 0.08em;
+    }
+
+    .brand-tag {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      font-family: var(--ff-body);
+    }
+
+    #hdr-key-status {
+      font-family: var(--ff-mono);
+      font-size: 0.72rem;
+      color: var(--text-faint);
+      padding: 0.2rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+    }
+
+    /* ── MAIN ── */
+    main {
+      width: 100%;
+      max-width: 760px;
+      padding: 3.5rem 2rem 6rem;
+      flex: 1;
+    }
+
+    /* ── SCREENS ── */
+    .screen { display: none; animation: fadeIn 0.25s ease; }
+    .screen.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* ── TYPOGRAPHY HELPERS ── */
+    .h1 {
+      font-family: var(--ff-display);
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: var(--ember);
+      letter-spacing: 0.04em;
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+
+    .h2 {
+      font-family: var(--ff-display);
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: var(--text-bright);
+      letter-spacing: 0.04em;
+      margin-bottom: 0.75rem;
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+
+    /* ── FORM ELEMENTS ── */
+    .field { margin-bottom: 1.5rem; }
+
+    label {
+      display: block;
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 0.5rem;
+      font-family: var(--ff-body);
+    }
+
+    input[type="text"],
+    input[type="password"],
+    textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      color: var(--text-bright);
+      font-family: var(--ff-mono);
+      font-size: 0.88rem;
+      padding: 0.8rem 1rem;
+      border-radius: var(--r);
+      outline: none;
+      transition: border-color 0.18s, box-shadow 0.18s;
+      line-height: 1.5;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    textarea:focus {
+      border-color: var(--ember-lo);
+      box-shadow: 0 0 0 3px var(--ember-glow);
+    }
+
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--ember);
+      color: #fff;
+      border: none;
+      padding: 0.7rem 1.8rem;
+      font-family: var(--ff-display);
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      border-radius: var(--r);
+      transition: background 0.18s, transform 0.1s;
+      margin-top: 1rem;
+      text-decoration: none;
+    }
+
+    .btn:hover { background: var(--ember-hi); }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text-dim);
+      padding: 0.6rem 1.4rem;
+      margin-top: 0;
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--ember-lo);
+      color: var(--ember);
+      background: transparent;
+    }
+
+    .btn-dl {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      font-family: var(--ff-display);
+      font-size: 0.8rem;
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      padding: 0.7rem 1.4rem;
+      margin-top: 0;
+    }
+
+    .btn-dl:hover {
+      border-color: var(--ember-lo);
+      color: var(--ember);
+      background: var(--surface3);
+    }
+
+    /* ── ERROR BOX ── */
+    .error {
+      background: #1e0e0e;
+      border: 1px solid #5a1818;
+      color: #c06060;
+      font-family: var(--ff-mono);
+      font-size: 0.8rem;
+      padding: 0.75rem 1rem;
+      border-radius: var(--r);
+      margin-top: 1rem;
+      display: none;
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    /* ── API KEY SCREEN ── */
+    .keyscreen-note {
+      font-size: 0.8rem;
+      color: var(--text-faint);
+      margin-top: 2rem;
+      line-height: 1.6;
+    }
+
+    .keyscreen-note a { color: var(--ember-lo); text-decoration: none; }
+    .keyscreen-note a:hover { color: var(--ember); }
+
+    /* ── RESEARCH SCREEN ── */
+    .research-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .phase-pill {
+      font-family: var(--ff-mono);
+      font-size: 0.68rem;
+      padding: 0.22rem 0.65rem;
+      border-radius: 20px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      transition: all 0.3s;
+    }
+
+    .phase-pill.discovery { background: var(--ember-lo); color: #fff; }
+    .phase-pill.research  { background: var(--green-dim); color: #6dba8a; }
+    .phase-pill.generating { background: var(--gold-dim); color: #e0b050; }
+    .phase-pill.complete  { background: #1a3a28; color: #60c080; }
+
+    /* Progress bar */
+    .progress-wrap {
+      margin: 1rem 0 0.5rem;
+    }
+
+    .progress-bar {
+      height: 2px;
+      background: var(--surface2);
+      border-radius: 1px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--ember-lo), var(--ember));
+      border-radius: 1px;
+      transition: width 0.6s cubic-bezier(.25,.8,.25,1);
+      box-shadow: 0 0 8px var(--ember-glow);
+    }
+
+    .progress-label {
+      font-family: var(--ff-mono);
+      font-size: 0.72rem;
+      color: var(--text-faint);
+      margin-top: 0.35rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-label .searches { color: var(--text-dim); }
+    .progress-label .searches span { color: var(--ember); }
+
+    /* Stream output */
+    .stream-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 1.25rem 1.5rem;
+      font-family: var(--ff-mono);
+      font-size: 0.78rem;
+      line-height: 1.7;
+      color: var(--text);
+      max-height: 380px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-top: 1.25rem;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) transparent;
+    }
+
+    .stream-box::-webkit-scrollbar { width: 4px; }
+    .stream-box::-webkit-scrollbar-track { background: transparent; }
+    .stream-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* Cursor blink */
+    .cursor {
+      display: inline-block;
+      width: 7px;
+      height: 13px;
+      background: var(--ember);
+      vertical-align: middle;
+      margin-left: 2px;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* Question box */
+    .q-box {
+      background: var(--surface);
+      border: 1px solid var(--ember-lo);
+      border-left: 3px solid var(--ember);
+      border-radius: var(--r);
+      padding: 1.25rem 1.5rem;
+      margin-top: 1.5rem;
+      display: none;
+    }
+
+    .q-box h3 {
+      font-family: var(--ff-display);
+      font-size: 0.85rem;
+      color: var(--ember);
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+    }
+
+    .q-item {
+      margin-bottom: 1.25rem;
+    }
+
+    .q-item:last-child { margin-bottom: 0; }
+
+    .q-text {
+      font-size: 0.9rem;
+      color: var(--text-bright);
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+
+    /* Status dot */
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ember);
+      flex-shrink: 0;
+    }
+
+    .dot.pulsing { animation: dpulse 1.5s ease-in-out infinite; }
+    .dot.done { background: var(--green); animation: none; }
+
+    @keyframes dpulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--ember-glow); }
+      50% { opacity: 0.6; box-shadow: 0 0 0 5px transparent; }
+    }
+
+    /* ── COMPLETE SCREEN ── */
+    .complete-hero {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .complete-stat {
+      font-family: var(--ff-mono);
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      margin-bottom: 0.3rem;
+    }
+
+    .complete-stat span { color: var(--text-bright); }
+
+    .dl-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 1.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .dl-section h3 {
+      font-family: var(--ff-display);
+      font-size: 0.9rem;
+      color: var(--text-bright);
+      letter-spacing: 0.06em;
+      margin-bottom: 1rem;
+    }
+
+    .dl-buttons {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    /* ── TOKEN TRACKER ── */
+    #tracker {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      font-family: var(--ff-mono);
+      font-size: 0.72rem;
+      width: 230px;
+      z-index: 100;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    #tracker-hdr {
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+
+    #tracker-hdr:hover { color: var(--text); }
+    #tracker-hdr-cost { color: var(--ember); }
+
+    #tracker-body {
+      padding: 0.75rem;
+      display: none;
+    }
+
+    #tracker-body.open { display: block; }
+
+    .t-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.3rem;
+      color: var(--text-dim);
+    }
+
+    .t-row .v { color: var(--text); }
+
+    .t-sep {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0.5rem 0;
+    }
+
+    .t-total { color: var(--ember); font-weight: 500; }
+
+    /* ── LOADING OVERLAY ── */
+    #loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(14,16,13,0.75);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    #loading-overlay.active { display: flex; }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--ember);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #loading-msg {
+      font-family: var(--ff-mono);
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+
+    /* ── SCROLLBAR GLOBAL ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="brand">
+    <span class="brand-name">The Clarity Factory</span>
+    <span class="brand-tag">Comprehensive · Current · On Demand</span>
+  </div>
+  <div id="hdr-key-status">No key loaded</div>
+</header>
+
+<!-- MAIN -->
+<main>
+
+  <!-- ── SCREEN: API KEY ── -->
+  <div class="screen active" id="scr-key">
+    <p class="h1">Welcome.</p>
+    <p class="subtitle">Enter your Anthropic API key to begin. It is held in memory for this session only — never stored, never logged, never sent anywhere except <code style="color:var(--ember-lo)">api.anthropic.com</code>.</p>
+
+    <div class="field">
+      <label for="key-input">Anthropic API Key</label>
+      <input type="password" id="key-input" placeholder="sk-ant-api03-…" autocomplete="off"
+             onkeydown="if(event.key==='Enter')doKey()">
+    </div>
+
+    <button class="btn" onclick="doKey()">Continue →</button>
+    <div class="error" id="key-err"></div>
+
+    <p class="keyscreen-note">
+      Don't have a key? Get one free at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.<br>
+      Billing: Claude Sonnet 4.6 — $3 / million input tokens · $15 / million output tokens.<br>
+      A typical guide run costs roughly $0.10–$0.35.
+    </p>
+  </div>
+
+  <!-- ── SCREEN: TOPIC ── -->
+  <div class="screen" id="scr-topic">
+    <p class="h2">What should we research?</p>
+    <p class="subtitle">Name a product category. The Clarity Factory will discover what matters in that space, run 25–50 live web searches, and build a complete buyer's guide — no domain knowledge required from you.</p>
+
+    <div class="field">
+      <label for="topic-input">Research Topic</label>
+      <input type="text" id="topic-input" placeholder="e.g.  robot vacuums  ·  standing desks  ·  pellet grills  ·  e-bikes"
+             onkeydown="if(event.key==='Enter')doTopic()">
+    </div>
+
+    <button class="btn" id="topic-btn" onclick="doTopic()">Begin Research →</button>
+    <div class="error" id="topic-err"></div>
+  </div>
+
+  <!-- ── SCREEN: RESEARCH ── -->
+  <div class="screen" id="scr-research">
+    <div class="research-header">
+      <div class="dot pulsing" id="res-dot"></div>
+      <span class="h2" id="res-title" style="margin-bottom:0">Researching…</span>
+      <span class="phase-pill discovery" id="phase-pill">Stage 0</span>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-bar">
+        <div class="progress-fill" id="prog-fill" style="width:4%"></div>
+      </div>
+      <div class="progress-label">
+        <span id="prog-label">Discovering what matters…</span>
+        <span class="searches">Searches: <span id="search-ct">0</span></span>
+      </div>
+    </div>
+
+    <div class="stream-box" id="stream-box"></div>
+
+    <!-- Clarifying questions panel -->
+    <div class="q-box" id="q-box">
+      <h3>A couple of quick questions</h3>
+      <div id="q-items"></div>
+      <button class="btn" onclick="doAnswers()" style="margin-top:1rem">Continue Research →</button>
+    </div>
+
+    <div class="error" id="res-err"></div>
+  </div>
+
+  <!-- ── SCREEN: COMPLETE ── -->
+  <div class="screen" id="scr-complete">
+    <div class="complete-hero">
+      <div class="dot done"></div>
+      <p class="h2" style="margin-bottom:0">Research Complete</p>
+    </div>
+
+    <div id="complete-stats"></div>
+
+    <div class="dl-section">
+      <h3>Your Deliverables</h3>
+      <div class="dl-buttons">
+        <button class="btn btn-dl" onclick="dlMarkdown()">📄 MASTER_SOURCE.md</button>
+        <button class="btn btn-dl" onclick="dlExcel()">📊 Guide Comparison.xlsx</button>
+      </div>
+      <p style="font-size:0.78rem;color:var(--text-faint);margin-top:0.85rem;line-height:1.5">
+        The .md file is the source of truth. The .xlsx is generated from it.<br>
+        Next quarterly update due in 3 months — re-upload the .md and run UPDATE_RUNNER_PROMPT.
+      </p>
+    </div>
+
+    <button class="btn btn-ghost" onclick="doReset()" style="margin-top:2rem">Research Another Topic</button>
+  </div>
+
+</main>
+
+<!-- TOKEN TRACKER -->
+<div id="tracker">
+  <div id="tracker-hdr" onclick="toggleTracker()">
+    <span>💰 Cost Tracker</span>
+    <span id="tracker-hdr-cost">$0.0000</span>
+  </div>
+  <div id="tracker-body">
+    <div class="t-row"><span>Input tokens</span><span class="v" id="t-in">0</span></div>
+    <div class="t-row"><span>Output tokens</span><span class="v" id="t-out">0</span></div>
+    <div class="t-row"><span>API calls</span><span class="v" id="t-calls">0</span></div>
+    <hr class="t-sep">
+    <div class="t-row"><span>Input cost</span><span class="v" id="t-in-cost">$0.0000</span></div>
+    <div class="t-row"><span>Output cost</span><span class="v" id="t-out-cost">$0.0000</span></div>
+    <div class="t-row t-total"><span>Total</span><span class="v" id="t-total">$0.0000</span></div>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div id="loading-msg">Contacting API…</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let G = {
+  key: null,
+  topic: null,
+  conversation: [],   // [{role, content}]
+  masterSource: null,
+  questions: [],      // [{label, input_id}]
+  searchCount: 0,
+  tokens: { in: 0, out: 0, calls: 0 },
+  streaming: false
+};
+
+const MODEL       = 'claude-sonnet-4-6';
+const PRICE_IN    = 3   / 1_000_000;
+const PRICE_OUT   = 15  / 1_000_000;
+
+// ═══════════════════════════════════════════
+// SYSTEM PROMPT
+// ═══════════════════════════════════════════
+const SYS = `You are The Clarity Factory — an AI research system that produces comprehensive, neutral buyer's guides on any product category. You have access to the web_search tool. Use it for EVERYTHING — never rely on training data for current prices, models, or market status.
+
+PHASE DETECTION: The user's message will start with either [PHASE:DISCOVERY] or [PHASE:RESEARCH].
+
+━━━ [PHASE:DISCOVERY] ━━━
+Run 6–10 web searches to map the category:
+- What evaluation criteria actually matter (the 8–12 dimensions buyers care about)
+- Who the major manufacturers/brands are
+- Any notable new entrants or discontinued products in the last 12–18 months
+- Any new form factors, fuel types, or accessory categories
+
+After searching, output a brief 2–4 paragraph summary of what you found. Then output your clarifying questions in this EXACT format — include the markers:
+
+QUESTIONS_START
+Q1: [First question — something that genuinely changes research scope, e.g., budget range, use case, indoor vs outdoor]
+Q2: [Second question — only if genuinely needed; omit this line if one question is enough]
+QUESTIONS_END
+
+━━━ [PHASE:RESEARCH] ━━━
+The user has answered your questions. Now run a THOROUGH research pass: 20–40 more web searches. Cover:
+- Every significant brand: current model lineup, MSRP/street price, warranty, manufacturing origin, notable features
+- New entrants discovered since last pass
+- Consumables/fuel/accessories (if relevant to category)
+- Reliability signals: forum consensus, expert review themes, common failure points
+- Market trends: new tech, price movements, category disruptions
+
+After completing research, output the complete MASTER_SOURCE file EXACTLY between these markers (no text before or after the markers on the same line):
+
+===MASTER_SOURCE_START===
+# MASTER SOURCE FILE — [Topic] Buyer's Guide
+
+## 0. PROJECT METADATA
+| Field | Value |
+|---|---|
+| Product category | [category] |
+| Scope | [brief scope description] |
+| Edition | Living document |
+| Last FULL update | [today's date YYYY-MM-DD] |
+| Last update model | Claude Sonnet 4.6 |
+| Next scheduled update | [3 months from today] |
+| Update cadence | Quarterly |
+
+## 1. HOW TO RUN AN UPDATE
+For each quarterly update, run BOTH passes:
+- VERTICAL: Re-verify every brand/model entry (price, availability, warranty, ownership changes)
+- HORIZONTAL: Run scan queries to find new entrants, discontinued products, new categories
+
+## 2. DISCOVERY LOG
+| Scan query | Purpose | Last run | Notable result |
+|---|---|---|---|
+[List every search query you ran, what it was for, today's date, and what you found]
+
+## 3. EVALUATION CRITERIA
+[8–12 criteria, each as: ### Criterion Name — description of what it measures and why it matters. Grade scale: A+ / A / A- / B+ / B / B- / C+ / C / C- / D / F]
+
+## 4. DATA — MANUFACTURERS / BRANDS
+> Schema: **Brand** | parent/ownership | founded | HQ | manufacturing | warranty | tier | notes | verified YYYY-MM-DD
+
+[One bullet per brand. Include every significant player you found.]
+
+## 5. DATA — PRODUCTS / MODELS
+> Schema: Brand | Model | MSRP | key specs | grades (build/temp-control/value/etc./overall) | notes | verified YYYY-MM-DD
+
+[One bullet per distinct model. This is the comparison database.]
+
+## 6. DATA — CONSUMABLES / ACCESSORIES (if applicable)
+[Fuel, cartridges, blades, filters, bags — whatever applies. Omit section header if not applicable.]
+
+## 7. KEY TRENDS
+[5–8 numbered trends shaping the market right now]
+
+## 8. CHANGELOG
+### [Today's date] — Initial build (Claude Sonnet 4.6)
+- [Bullet list of what was discovered, added, notable findings]
+===MASTER_SOURCE_END===
+
+RULES FOR ALL PHASES:
+- Neutral throughout — no brand favoritism
+- Grade scale: A+ / A / A- / B+ / B / B- / C+ / C / C- / D / F
+- Every price from live search, never from training memory
+- Flag anything that couldn't be verified`;
+
+// ═══════════════════════════════════════════
+// SCREEN MANAGEMENT
+// ═══════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('scr-' + id).classList.add('active');
+}
+
+// ═══════════════════════════════════════════
+// API KEY
+// ═══════════════════════════════════════════
+function doKey() {
+  const v = document.getElementById('key-input').value.trim();
+  if (!v.startsWith('sk-ant-')) {
+    showErr('key-err', 'That doesn\'t look right. Anthropic keys start with sk-ant-');
+    return;
+  }
+  G.key = v;
+  hideErr('key-err');
+  document.getElementById('hdr-key-status').textContent = v.slice(0, 14) + '…';
+  showScreen('topic');
+  document.getElementById('topic-input').focus();
+}
+
+// ═══════════════════════════════════════════
+// TOPIC → PHASE 1 (DISCOVERY)
+// ═══════════════════════════════════════════
+async function doTopic() {
+  const t = document.getElementById('topic-input').value.trim();
+  if (!t) { showErr('topic-err', 'Please enter a topic.'); return; }
+  G.topic = t;
+  G.conversation = [];
+  G.searchCount = 0;
+  G.masterSource = null;
+  G.tokens = { in: 0, out: 0, calls: 0 };
+  hideErr('topic-err');
+
+  showScreen('research');
+  document.getElementById('res-title').textContent = `Researching: ${t}`;
+  setPill('discovery', 'Stage 0 — Discovery');
+  setProgress(4, 'Discovering what matters…');
+  clearStream();
+
+  const msg = `[PHASE:DISCOVERY]\n\nTopic: ${t}\n\nRun your discovery searches and ask clarifying questions.`;
+  G.conversation.push({ role: 'user', content: msg });
+
+  await runStream('discovery');
+}
+
+// ═══════════════════════════════════════════
+// ANSWERS → PHASE 2 (RESEARCH)
+// ═══════════════════════════════════════════
+async function doAnswers() {
+  // Collect answers
+  const parts = [];
+  G.questions.forEach((q, i) => {
+    const ans = document.getElementById(q.inputId).value.trim();
+    parts.push(`${q.label}\nAnswer: ${ans || '(no preference)'}`);
+  });
+
+  document.getElementById('q-box').style.display = 'none';
+  clearStream();
+  setPill('research', 'Stage 1–3 — Full Research');
+  setProgress(15, 'Running full research pass…');
+
+  const userContent = `[PHASE:RESEARCH]\n\nAnswers to your questions:\n${parts.join('\n\n')}\n\nPlease run the complete research pass and generate the MASTER_SOURCE file.`;
+  G.conversation.push({ role: 'user', content: userContent });
+
+  await runStream('research');
+}
+
+// ═══════════════════════════════════════════
+// CORE STREAMING FUNCTION
+// ═══════════════════════════════════════════
+async function runStream(phase) {
+  hideErr('res-err');
+  G.streaming = true;
+
+  const cursorEl = document.createElement('span');
+  cursorEl.className = 'cursor';
+
+  try {
+    const body = JSON.stringify({
+      model: MODEL,
+      max_tokens: phase === 'research' ? 12000 : 4096,
+      system: SYS,
+      messages: G.conversation,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      stream: true
+    });
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': G.key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body
+    });
+
+    if (!resp.ok) {
+      const errData = await resp.json();
+      throw new Error(errData.error?.message || `HTTP ${resp.status}`);
+    }
+
+    G.tokens.calls++;
+    updateTracker();
+
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let fullText = '';
+    let stopReason = null;
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    // Attach cursor
+    const box = document.getElementById('stream-box');
+    box.appendChild(cursorEl);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+
+        let ev;
+        try { ev = JSON.parse(raw); } catch { continue; }
+
+        if (ev.type === 'message_start' && ev.message?.usage) {
+          inputTokens = ev.message.usage.input_tokens || 0;
+        }
+
+        if (ev.type === 'content_block_delta') {
+          if (ev.delta?.type === 'text_delta') {
+            const chunk = ev.delta.text;
+            fullText += chunk;
+            appendStream(chunk, cursorEl);
+          }
+        }
+
+        if (ev.type === 'message_delta') {
+          stopReason = ev.delta?.stop_reason;
+          outputTokens = ev.usage?.output_tokens || 0;
+        }
+
+        // Count tool use (web_search calls)
+        if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+          if (ev.content_block.name === 'web_search') {
+            G.searchCount++;
+            document.getElementById('search-ct').textContent = G.searchCount;
+            const pct = Math.min(4 + G.searchCount * 2, 85);
+            if (phase === 'research') {
+              setProgress(pct, `Searching… (${G.searchCount} done)`);
+            }
+          }
+        }
+      }
+    }
+
+    // Remove cursor
+    cursorEl.remove();
+
+    // Update tokens
+    G.tokens.in  += inputTokens;
+    G.tokens.out += outputTokens;
+    updateTracker();
+
+    // Store assistant response
+    G.conversation.push({
+      role: 'assistant',
+      content: [{ type: 'text', text: fullText }]
+    });
+
+    // Agentic loop: if tool_use stop, continue
+    if (stopReason === 'tool_use') {
+      // Build tool_result stub — for built-in web_search, API handles execution
+      // but we need to continue the conversation
+      setProgress(Math.min(4 + G.searchCount * 2 + 10, 90), 'Continuing…');
+      await runStream(phase);
+      return;
+    }
+
+    // Parse the response
+    if (phase === 'discovery') {
+      parseDiscovery(fullText);
+    } else {
+      parseResearch(fullText);
+    }
+
+  } catch (err) {
+    cursorEl.remove();
+    showErr('res-err', 'API error: ' + err.message);
+    console.error(err);
+  } finally {
+    G.streaming = false;
+  }
+}
+
+// ═══════════════════════════════════════════
+// PARSE DISCOVERY RESPONSE
+// ═══════════════════════════════════════════
+function parseDiscovery(text) {
+  const qMatch = text.match(/QUESTIONS_START\s*([\s\S]*?)\s*QUESTIONS_END/);
+  if (!qMatch) {
+    // No questions found — go straight to research
+    setProgress(15, 'Proceeding to full research…');
+    G.conversation.push({ role: 'user', content: '[PHASE:RESEARCH]\n\nNo clarifying questions needed — proceed with full research and generate the MASTER_SOURCE.' });
+    runStream('research');
+    return;
+  }
+
+  const qBlock = qMatch[1].trim();
+  const qLines = qBlock.split('\n').filter(l => l.match(/^Q\d+:/i));
+  G.questions = qLines.map((l, i) => ({
+    label: l.replace(/^Q\d+:\s*/i, '').trim(),
+    inputId: `q-ans-${i}`
+  }));
+
+  // Render questions
+  const container = document.getElementById('q-items');
+  container.innerHTML = '';
+  G.questions.forEach((q, i) => {
+    const div = document.createElement('div');
+    div.className = 'q-item';
+    div.innerHTML = `
+      <div class="q-text">${esc(q.label)}</div>
+      <textarea id="${q.inputId}" rows="2" placeholder="Your answer…"></textarea>
+    `;
+    container.appendChild(div);
+  });
+
+  document.getElementById('q-box').style.display = 'block';
+  setProgress(12, 'Waiting for your answers…');
+  setPill('discovery', 'Stage 0 — Questions');
+}
+
+// ═══════════════════════════════════════════
+// PARSE RESEARCH RESPONSE
+// ═══════════════════════════════════════════
+function parseResearch(text) {
+  const match = text.match(/===MASTER_SOURCE_START===([\s\S]*?)===MASTER_SOURCE_END===/);
+
+  if (!match) {
+    // MASTER_SOURCE not found in this pass — request continuation
+    setPill('generating', 'Generating…');
+    setProgress(88, 'Generating MASTER_SOURCE…');
+    G.conversation.push({
+      role: 'user',
+      content: 'Please now generate the complete MASTER_SOURCE file between the ===MASTER_SOURCE_START=== and ===MASTER_SOURCE_END=== markers as specified.'
+    });
+    runStream('research');
+    return;
+  }
+
+  G.masterSource = match[1].trim();
+  setProgress(100, 'Complete');
+  setPill('complete', 'Complete');
+  document.getElementById('res-dot').classList.remove('pulsing');
+  document.getElementById('res-dot').classList.add('done');
+
+  showComplete();
+}
+
+// ═══════════════════════════════════════════
+// COMPLETE SCREEN
+// ═══════════════════════════════════════════
+function showComplete() {
+  const total = costTotal();
+  const statsHtml = `
+    <div class="complete-stat">Topic: <span>${esc(G.topic)}</span></div>
+    <div class="complete-stat">Searches run: <span>${G.searchCount}</span></div>
+    <div class="complete-stat">Total API cost: <span>$${total.toFixed(4)}</span></div>
+    <div class="complete-stat">Next quarterly update due: <span>${nextUpdateDate()}</span></div>
+  `;
+  document.getElementById('complete-stats').innerHTML = statsHtml;
+  showScreen('complete');
+}
+
+// ═══════════════════════════════════════════
+// DOWNLOADS
+// ═══════════════════════════════════════════
+function dlMarkdown() {
+  if (!G.masterSource) return;
+  const blob = new Blob([G.masterSource], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `MASTER_SOURCE_${slug(G.topic)}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function dlExcel() {
+  if (!G.masterSource) return;
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Products
+  const products = parseProductSheet(G.masterSource);
+  if (products.length > 1) {
+    const ws = XLSX.utils.aoa_to_sheet(products);
+    styleSheet(ws, products[0].length);
+    XLSX.utils.book_append_sheet(wb, ws, 'Product Comparison');
+  }
+
+  // Sheet 2: Brands
+  const brands = parseBrandSheet(G.masterSource);
+  if (brands.length > 1) {
+    const ws2 = XLSX.utils.aoa_to_sheet(brands);
+    styleSheet(ws2, brands[0].length);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Brands');
+  }
+
+  // Sheet 3: Consumables
+  const consumables = parseConsumablesSheet(G.masterSource);
+  if (consumables.length > 1) {
+    const ws3 = XLSX.utils.aoa_to_sheet(consumables);
+    XLSX.utils.book_append_sheet(wb, ws3, 'Consumables');
+  }
+
+  // Sheet 4: Raw Source
+  const ws4 = XLSX.utils.aoa_to_sheet([
+    ['MASTER SOURCE — The Clarity Factory'],
+    ['Generated:', new Date().toISOString()],
+    ['Topic:', G.topic],
+    [],
+    [G.masterSource]
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws4, 'Raw Source');
+
+  XLSX.writeFile(wb, `ClarityFactory_${slug(G.topic)}.xlsx`);
+}
+
+function parseProductSheet(src) {
+  const rows = [['Brand', 'Model', 'MSRP / Price', 'Key Specs', 'Overall Grade', 'Notes', 'Verified']];
+  const sec = extractSection(src, '## 5.', '## 6.');
+  if (!sec) return rows;
+
+  for (const line of sec.split('\n')) {
+    if (!line.startsWith('- ')) continue;
+    const parts = line.slice(2).split(' | ');
+    if (parts.length >= 2) {
+      rows.push([
+        parts[0]?.replace(/\*\*/g,'').trim() || '',
+        parts[1]?.trim() || '',
+        parts[2]?.trim() || '',
+        parts[3]?.trim() || '',
+        parts[4]?.trim() || '',
+        parts[5]?.trim() || '',
+        parts[parts.length - 1]?.trim() || ''
+      ]);
+    }
+  }
+  return rows;
+}
+
+function parseBrandSheet(src) {
+  const rows = [['Brand', 'Parent / Ownership', 'Founded', 'HQ', 'Warranty', 'Tier', 'Notes', 'Verified']];
+  const sec = extractSection(src, '## 4.', '## 5.');
+  if (!sec) return rows;
+
+  for (const line of sec.split('\n')) {
+    if (!line.match(/^- \*\*/)) continue;
+    const nameMatch = line.match(/\*\*([^*]+)\*\*/);
+    const parts = line.split(' | ');
+    if (nameMatch) {
+      rows.push([
+        nameMatch[1] || '',
+        parts[1]?.trim() || '',
+        parts[2]?.trim() || '',
+        parts[3]?.trim() || '',
+        parts[5]?.trim() || '',
+        parts[6]?.trim() || '',
+        parts[7]?.trim() || '',
+        parts[parts.length - 1]?.trim() || ''
+      ]);
+    }
+  }
+  return rows;
+}
+
+function parseConsumablesSheet(src) {
+  const rows = [['Item', 'Grade', 'Notes', 'Verified']];
+  const sec = extractSection(src, '## 6.', '## 7.');
+  if (!sec) return rows;
+
+  for (const line of sec.split('\n')) {
+    if (!line.startsWith('- ')) continue;
+    const parts = line.slice(2).split(' | ');
+    if (parts.length >= 1) {
+      rows.push([
+        parts[0]?.replace(/\*\*/g,'').trim() || '',
+        parts[1]?.trim() || '',
+        parts[2]?.trim() || '',
+        parts[parts.length - 1]?.trim() || ''
+      ]);
+    }
+  }
+  return rows;
+}
+
+function extractSection(src, startMarker, endMarker) {
+  const si = src.indexOf(startMarker);
+  if (si === -1) return null;
+  const ei = endMarker ? src.indexOf(endMarker, si + startMarker.length) : src.length;
+  return src.slice(si + startMarker.length, ei === -1 ? undefined : ei);
+}
+
+function styleSheet(ws, cols) {
+  // Set column widths
+  ws['!cols'] = Array.from({ length: cols }, () => ({ wch: 22 }));
+}
+
+// ═══════════════════════════════════════════
+// TOKEN / COST TRACKER
+// ═══════════════════════════════════════════
+function toggleTracker() {
+  document.getElementById('tracker-body').classList.toggle('open');
+}
+
+function costTotal() {
+  return G.tokens.in * PRICE_IN + G.tokens.out * PRICE_OUT;
+}
+
+function updateTracker() {
+  const ic = G.tokens.in * PRICE_IN;
+  const oc = G.tokens.out * PRICE_OUT;
+  const tot = ic + oc;
+
+  document.getElementById('t-in').textContent       = G.tokens.in.toLocaleString();
+  document.getElementById('t-out').textContent      = G.tokens.out.toLocaleString();
+  document.getElementById('t-calls').textContent    = G.tokens.calls;
+  document.getElementById('t-in-cost').textContent  = '$' + ic.toFixed(4);
+  document.getElementById('t-out-cost').textContent = '$' + oc.toFixed(4);
+  document.getElementById('t-total').textContent    = '$' + tot.toFixed(4);
+  document.getElementById('tracker-hdr-cost').textContent = '$' + tot.toFixed(4);
+}
+
+// ═══════════════════════════════════════════
+// RESET
+// ═══════════════════════════════════════════
+function doReset() {
+  G.topic = null;
+  G.conversation = [];
+  G.masterSource = null;
+  G.questions = [];
+  G.searchCount = 0;
+
+  document.getElementById('topic-input').value = '';
+  document.getElementById('q-box').style.display = 'none';
+  document.getElementById('q-items').innerHTML = '';
+  document.getElementById('res-dot').classList.remove('done');
+  document.getElementById('res-dot').classList.add('pulsing');
+  clearStream();
+
+  showScreen('topic');
+  document.getElementById('topic-input').focus();
+}
+
+// ═══════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════
+function clearStream() {
+  document.getElementById('stream-box').textContent = '';
+  document.getElementById('search-ct').textContent = '0';
+}
+
+function appendStream(text, cursorEl) {
+  const box = document.getElementById('stream-box');
+  const node = document.createTextNode(text);
+  if (cursorEl && cursorEl.parentNode === box) {
+    box.insertBefore(node, cursorEl);
+  } else {
+    box.appendChild(node);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function setPill(cls, text) {
+  const p = document.getElementById('phase-pill');
+  p.className = `phase-pill ${cls}`;
+  p.textContent = text;
+}
+
+function setProgress(pct, label) {
+  document.getElementById('prog-fill').style.width = pct + '%';
+  if (label) document.getElementById('prog-label').textContent = label;
+}
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideErr(id) {
+  document.getElementById(id).style.display = 'none';
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function slug(str) {
+  return str.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function nextUpdateDate() {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 3);
+  return d.toISOString().slice(0, 10);
+}
+</script>
+
+</body>
+</html>
