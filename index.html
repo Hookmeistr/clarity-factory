@@ -1859,12 +1859,28 @@ function hideErr(id) { document.getElementById(id).style.display = 'none'; }
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 function slug(str) { return str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
 
-// Init: restore saved key on page load
+// Init: restore saved key on page load OR from QR code URL parameter
 (function initSavedKey() {
+  // Check for ?key= in URL (from QR code scan)
+  const params = new URLSearchParams(window.location.search);
+  const urlKey = params.get('key');
+  if (urlKey && urlKey.startsWith('sk-ant-')) {
+    G.key = urlKey;
+    localStorage.setItem('cf_api_key', urlKey);
+    document.getElementById('hdr-key-status').textContent = urlKey.slice(0, 14) + '…';
+    // Clean the key out of the URL so it doesn't sit visible in the address bar
+    window.history.replaceState({}, '', window.location.pathname);
+    // Skip key screen and go straight to topic
+    showScreen('topic');
+    return;
+  }
+  // Normal saved key restore
   const saved = localStorage.getItem('cf_api_key');
   if (saved) {
+    G.key = saved;
     document.getElementById('key-input').value = saved;
     document.getElementById('hdr-key-status').textContent = saved.slice(0, 14) + '…';
+    showScreen('topic');
   }
 })();
 
