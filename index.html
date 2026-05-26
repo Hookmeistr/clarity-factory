@@ -1149,7 +1149,11 @@ async function runStream(phase, attempt = 0) {
 
   } catch (err) {
     cursorEl.remove();
-    showErr('res-err', 'API error: ' + err.message);
+    // Log partial run to Firestore even on failure
+    if (G.tokens.in > 0 || G.tokens.out > 0) {
+      logRunToFirestore('failed');
+    }
+    showErr('res-err', err.message);
     console.error(err);
   } finally {
     G.streaming = false;
@@ -1218,9 +1222,9 @@ function parseResearch(text) {
 // ═══════════════════════════════════════════
 // FIREBASE — LOG RUN
 // ═══════════════════════════════════════════
-async function logRunToFirestore() {
+async function logRunToFirestore(status = 'complete') {
   if (!window._firebaseReady) {
-    window.addEventListener('firebaseReady', logRunToFirestore, { once: true });
+    window.addEventListener('firebaseReady', () => logRunToFirestore(status), { once: true });
     return;
   }
   try {
@@ -1228,16 +1232,17 @@ async function logRunToFirestore() {
     await window._fsAddDoc(
       window._fsCollection(window._db, COLLECTION),
       {
-        topic:       G.topic,
+        topic:       G.topic || '(unknown)',
         date:        new Date().toISOString(),
         searches:    G.searchCount,
         inputTokens: G.tokens.in,
         outputTokens:G.tokens.out,
         cost:        parseFloat(cost.toFixed(6)),
+        status:      status,
         timestamp:   Date.now()
       }
     );
-    console.log('Run logged to Firestore');
+    console.log('Run logged to Firestore:', status);
   } catch (e) {
     console.warn('Firestore log failed:', e.message);
   }
@@ -1281,13 +1286,16 @@ async function loadDashboard() {
     tbody.innerHTML = runs.map(r => {
       const d = new Date(r.date);
       const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const statusBadge = r.status === 'failed'
+        ? '<span style="color:#c06060;font-size:0.82rem">failed</span>'
+        : '<span style="color:var(--green);font-size:0.82rem">complete</span>';
       return `<tr>
         <td class="topic-cell">${esc(r.topic || '—')}</td>
         <td>${dateStr}</td>
         <td>${r.searches || 0}</td>
         <td>${(r.inputTokens || 0).toLocaleString()}</td>
         <td>${(r.outputTokens || 0).toLocaleString()}</td>
-        <td class="cost-cell">$${(r.cost || 0).toFixed(4)}</td>
+        <td class="cost-cell">$${(r.cost || 0).toFixed(4)} ${statusBadge}</td>
       </tr>`;
     }).join('');
 
