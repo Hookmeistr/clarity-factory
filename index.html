@@ -319,7 +319,7 @@
     .progress-label .searches span { color: var(--ember); }
 
     .stream-box {
-      display: none !important; /* Raw output hidden from user */
+      display: none !important;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r);
@@ -359,7 +359,7 @@
 
     .q-box h3 {
       font-family: var(--ff-display);
-      font-size: 1.15rem;
+      font-size: 1.1rem;
       color: var(--text-bright);
       margin-bottom: 1.2rem;
       padding-bottom: 0.7rem;
@@ -367,7 +367,7 @@
     }
 
     .q-item { margin-bottom: 1.5rem; }
-    .q-text { font-size: 1rem; color: var(--text-bright); margin-bottom: 0.5rem; font-weight: 600; line-height: 1.5; }
+    .q-text { font-size: 1rem; color: var(--text-bright); margin-bottom: 0.6rem; font-weight: 600; line-height: 1.5; }
     .q-item textarea { width: 100%; font-size: 0.96rem; padding: 0.7rem; background: var(--surface3); border: 1px solid var(--border2); border-radius: 3px; color: var(--text-bright); font-family: var(--ff-body); resize: vertical; }
     .q-item textarea:focus { border-color: var(--ember); outline: none; }
     .q-item:last-child { margin-bottom: 0; }
@@ -578,9 +578,9 @@
         gap: 0.5rem;
       }
       .brand-name { font-size: 0.95rem; }
-      .brand-tag  { font-size: 0.72rem; }
-      #hdr-key-status { font-size: 0.72rem; }
-      .hdr-btn { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
+      .brand-tag  { font-size: 0.96rem; }
+      #hdr-key-status { font-size: 0.96rem; }
+      .hdr-btn { font-size: 0.91rem; padding: 0.3rem 0.6rem; }
 
       .screen { padding: 2rem 1.1rem; }
 
@@ -624,6 +624,29 @@
       }
     }
 
+    @media (max-width: 400px) {
+      .screen-title { font-size: 1.35rem; }
+      .complete-stats { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 600px) {
+      header { padding: 0.9rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
+      .brand-name { font-size: 0.95rem; }
+      .brand-tag  { font-size: 0.72rem; }
+      #hdr-key-status { font-size: 0.72rem; }
+      .hdr-btn { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
+      .screen { padding: 2rem 1.1rem; }
+      .screen-title { font-size: 1.6rem; }
+      .screen-sub   { font-size: 0.93rem; }
+      .card { padding: 1.2rem 1rem; }
+      input[type="password"], input[type="text"], textarea { font-size: 1rem; padding: 0.7rem 0.9rem; }
+      .btn-primary { width: 100%; font-size: 0.96rem; padding: 0.75rem 1rem; }
+      .btn-ghost, .btn-dl { width: 100%; font-size: 0.93rem; padding: 0.65rem 1rem; }
+      .complete-stats { grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+      .complete-stat { font-size: 0.90rem; }
+      .t-row { font-size: 0.90rem; }
+      #tracker-widget { right: 0.5rem; left: 0.5rem; width: auto; }
+    }
     @media (max-width: 400px) {
       .screen-title { font-size: 1.35rem; }
       .complete-stats { grid-template-columns: 1fr; }
@@ -705,9 +728,12 @@
     <div class="stream-box" id="stream-box"></div>
 
     <div class="q-box" id="q-box">
-      <h3>⬇ Please answer these questions before continuing</h3>
+      <h3>&#8595; Please answer all questions before continuing</h3>
       <div id="q-items"></div>
-      <button class="btn btn-primary" onclick="doAnswers()" style="margin-top:1.2rem;width:100%;font-size:1rem;padding:0.85rem">Submit Answers &amp; Run Full Research →</button>
+      <div id="q-hint" style="display:none;color:var(--ember);font-size:0.93rem;margin-top:0.9rem;padding:0.6rem 0.9rem;background:var(--ember-glow);border-radius:3px;">
+        &#9888; Please answer all questions above before continuing.
+      </div>
+      <button class="btn btn-primary" onclick="doAnswers()" style="margin-top:1.2rem;width:100%;font-size:1rem;padding:0.85rem">Submit Answers &amp; Run Full Research &#8594;</button>
     </div>
 
     <div class="error" id="res-err"></div>
@@ -969,10 +995,29 @@ async function doTopic() {
 // ANSWERS → PHASE 2 (RESEARCH)
 // ═══════════════════════════════════════════
 async function doAnswers() {
+  // Validate — all questions must be answered
+  let allAnswered = true;
+  G.questions.forEach(q => {
+    const el = document.getElementById(q.inputId);
+    const ans = el.value.trim();
+    if (!ans) {
+      el.style.borderColor = 'var(--ember)';
+      el.placeholder = 'Please answer this question before continuing…';
+      allAnswered = false;
+    } else {
+      el.style.borderColor = '';
+    }
+  });
+  if (!allAnswered) {
+    const hint = document.getElementById('q-hint');
+    if (hint) { hint.style.display = 'block'; }
+    return;
+  }
+
   const parts = [];
   G.questions.forEach(q => {
     const ans = document.getElementById(q.inputId).value.trim();
-    parts.push(`${q.label}\nAnswer: ${ans || '(no preference)'}`);
+    parts.push(`${q.label}\nAnswer: ${ans}`);
   });
 
   document.getElementById('q-box').style.display = 'none';
@@ -1014,8 +1059,6 @@ async function runStream(phase, attempt = 0) {
         max_tokens: phase === 'research' ? 12000 : 4096,
         system: SYS,
         messages: (function() {
-          // Keep only the last 3 messages to reduce input tokens
-          // Always keep the first user message (topic/phase marker)
           if (G.conversation.length <= 3) return G.conversation;
           return [G.conversation[0], ...G.conversation.slice(-2)];
         })(),
@@ -1026,24 +1069,19 @@ async function runStream(phase, attempt = 0) {
 
     if (!resp.ok) {
       const e = await resp.json();
-      const msg = e.error?.message || '';
       if (resp.status === 429 && attempt < 4) {
         const wait = [20, 35, 60, 90][attempt];
-        setProgress(
-          Math.min(15 + G.searchCount * 1.8, 84),
-          `Rate limit reached — retrying in ${wait}s…`
-        );
+        setProgress(Math.min(15 + G.searchCount * 1.8, 84), `Rate limit — retrying in ${wait}s…`);
         cursorEl.remove();
         G.streaming = false;
         await sleep(wait * 1000);
         await runStream(phase, attempt + 1);
         return;
       }
-      // Friendly error messages
-      if (resp.status === 429) throw new Error('Usage limit reached. Please wait a minute and try again.');
-      if (resp.status === 401) throw new Error('API key invalid. Please re-enter your key.');
-      if (resp.status === 500) throw new Error('Anthropic service error. Please try again in a moment.');
-      throw new Error(msg || `Request failed (HTTP ${resp.status})`);
+      if (resp.status === 429) throw new Error('Usage limit reached. Please wait a moment and try again.');
+      if (resp.status === 401) throw new Error('Invalid API key. Please re-enter your key.');
+      if (resp.status === 500) throw new Error('Anthropic service error. Please try again shortly.');
+      throw new Error(e.error?.message || `Request failed (HTTP ${resp.status})`);
     }
 
     G.tokens.calls++;
@@ -1145,9 +1183,8 @@ function parseDiscovery(text) {
   });
 
   document.getElementById('q-box').style.display = 'block';
-  setProgress(12, 'Ready for your answers…');
-  // Scroll to questions
-  document.getElementById('q-box').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setProgress(12, 'Your answers needed below…');
+  setTimeout(() => document.getElementById('q-box').scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
   setPill('discovery', 'Stage 0 — Questions');
 }
 
