@@ -282,6 +282,39 @@
     .phase-pill.generating { background: var(--gold-dim); color: #e0b050; }
     .phase-pill.complete   { background: #1a3a28; color: #60c080; }
     .phase-pill.pacing     { background: #2a2010; color: #c09040; }
+    .phase-pill.refining   { background: #102028; color: #40a0c0; }
+
+    .refine-box {
+      background: var(--surface2);
+      border: 2px solid var(--border2);
+      border-radius: 6px;
+      padding: 1.8rem;
+      margin-top: 1.5rem;
+    }
+    .refine-box h3 {
+      font-family: var(--ff-display);
+      font-size: 1.05rem;
+      color: var(--text-bright);
+      margin-bottom: 0.5rem;
+    }
+    .refine-box .refine-sub {
+      font-family: var(--ff-mono);
+      font-size: 0.84rem;
+      color: var(--text-faint);
+      margin-bottom: 1.1rem;
+      line-height: 1.5;
+    }
+    .btn-refine {
+      background: var(--surface2);
+      border: 1px solid var(--ember-lo);
+      color: var(--ember);
+      font-family: var(--ff-display);
+      font-size: 0.91rem;
+      letter-spacing: 0.04em;
+      padding: 0.7rem 1.4rem;
+      margin-top: 0;
+    }
+    .btn-refine:hover { background: var(--ember-glow); border-color: var(--ember); }
 
     .progress-wrap { margin: 1rem 0 0.5rem; }
 
@@ -709,7 +742,41 @@
       </p>
     </div>
 
-    <button class="btn btn-ghost" onclick="doReset()" style="margin-top:2rem">Research Another Topic</button>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:2rem;">
+      <button class="btn btn-refine" onclick="showRefine()">🔧 Refine Results</button>
+      <button class="btn btn-ghost" onclick="doReset()">Research Another Topic</button>
+    </div>
+  </div>
+
+  <!-- SCREEN: REFINE -->
+  <div class="screen" id="scr-refine">
+    <div class="research-header">
+      <div class="dot pulsing" id="refine-dot"></div>
+      <span class="h2" id="refine-title" style="margin-bottom:0">Refine Guide</span>
+      <span class="phase-pill refining" id="refine-pill">Refine</span>
+    </div>
+
+    <div class="progress-wrap" id="refine-progress-wrap" style="display:none;">
+      <div class="progress-bar">
+        <div class="progress-fill" id="refine-prog-fill" style="width:4%"></div>
+      </div>
+      <div class="progress-label">
+        <span id="refine-prog-label">Running refinement…</span>
+        <span class="searches">Searches: <span id="refine-search-ct">0</span></span>
+      </div>
+    </div>
+
+    <div class="refine-box" id="refine-input-box">
+      <h3>What would you like to add or change?</h3>
+      <div class="refine-sub">Describe the variables you want added to your guide — e.g. "add hair length options" or "include options for medical/alopecia use." Only the new variables will be researched. The existing guide stays intact.</div>
+      <textarea id="refine-input" rows="4" placeholder="e.g. Add hair length as a variable — short, medium, shoulder-length, long. Also include options specifically suited for medical/alopecia use." style="width:100%;font-size:0.96rem;padding:0.8rem;background:var(--surface3);border:1px solid var(--border2);border-radius:3px;color:var(--text-bright);font-family:var(--ff-body);resize:vertical;"></textarea>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:1.2rem;">
+        <button class="btn" onclick="runRefine()" style="margin-top:0;">Run Refinement →</button>
+        <button class="btn btn-ghost" onclick="showScreen('complete')" style="margin-top:0;">← Back</button>
+      </div>
+    </div>
+
+    <div class="error" id="refine-err"></div>
   </div>
 
   <!-- SCREEN: DASHBOARD -->
@@ -785,8 +852,9 @@ let G = {
   conversation: [],
   masterSource: null,
   questions: [],
+  priorAnswers: [],      // ← stores Q&A summary for refine context
   searchCount: 0,
-  callCount: 0,          // ← NEW: tracks consecutive API calls for pacing
+  callCount: 0,          // ← tracks consecutive API calls for pacing
   tokens: { in: 0, out: 0, calls: 0 },
   streaming: false,
   prevScreen: 'topic'
@@ -908,7 +976,23 @@ HORIZONTAL: Run scan queries to find new entrants, discontinued products, new ca
 - [Key findings]
 ===MASTER_SOURCE_END===
 
-RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anything unverified`;
+RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anything unverified
+
+━━━ [PHASE:REFINE] ━━━
+The user has an existing MASTER_SOURCE and wants to add or change specific variables without redoing the full research.
+
+The existing MASTER_SOURCE and refinement request are included in the user message.
+
+Your job:
+1. Run 5–15 TARGETED searches covering ONLY the new variables the user specified
+2. Integrate the new information into the existing MASTER_SOURCE
+3. Do NOT re-research anything already covered — only fill in what is missing
+4. Add a dated changelog entry describing exactly what was added
+5. Output the complete updated MASTER_SOURCE between the standard markers
+
+===MASTER_SOURCE_START===
+[full updated MASTER_SOURCE here]
+===MASTER_SOURCE_END===`;
 
 // ═══════════════════════════════════════════
 // SCREEN MANAGEMENT
@@ -1014,6 +1098,8 @@ async function doAnswers() {
   clearStream();
   setPill('research', 'Stage 1–3 — Full Research');
   setProgress(15, 'Running full research pass…');
+
+  G.priorAnswers = parts.slice(); // save for refine context
 
   G.conversation.push({
     role: 'user',
@@ -1544,11 +1630,180 @@ function updateTracker() {
 }
 
 // ═══════════════════════════════════════════
+// REFINE
+// ═══════════════════════════════════════════
+function showRefine() {
+  document.getElementById('refine-input').value = '';
+  document.getElementById('refine-input-box').style.display = 'block';
+  document.getElementById('refine-progress-wrap').style.display = 'none';
+  document.getElementById('refine-dot').className = 'dot pulsing';
+  document.getElementById('refine-pill').className = 'phase-pill refining';
+  document.getElementById('refine-pill').textContent = 'Refine';
+  document.getElementById('refine-title').textContent = `Refine: ${G.topic}`;
+  hideErr('refine-err');
+  showScreen('refine');
+}
+
+async function runRefine() {
+  const req = document.getElementById('refine-input').value.trim();
+  if (!req) {
+    showErr('refine-err', 'Please describe what you want to add or change.');
+    return;
+  }
+
+  // Hide input, show progress
+  document.getElementById('refine-input-box').style.display = 'none';
+  document.getElementById('refine-progress-wrap').style.display = 'block';
+  hideErr('refine-err');
+
+  // Reset per-run counters but keep existing masterSource
+  G.searchCount = 0;
+  G.callCount = 0;
+  G.tokens = { in: 0, out: 0, calls: 0 };
+  document.getElementById('refine-search-ct').textContent = '0';
+
+  const priorContext = G.priorAnswers.length
+    ? `\n\nOriginal buyer answers:\n${G.priorAnswers.join('\n')}`
+    : '';
+
+  G.conversation = [{
+    role: 'user',
+    content: `[PHASE:REFINE]\n\nTopic: ${G.topic}${priorContext}\n\nRefinement request: ${req}\n\nExisting MASTER_SOURCE:\n${G.masterSource}`
+  }];
+
+  await runRefineStream();
+}
+
+async function runRefineStream(attempt = 0) {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  hideErr('refine-err');
+
+  const setRefineProgress = (pct, label) => {
+    document.getElementById('refine-prog-fill').style.width = pct + '%';
+    document.getElementById('refine-prog-label').textContent = label;
+  };
+
+  const cursorEl = document.createElement('span');
+  cursorEl.className = 'cursor';
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': G.key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 12000,
+        system: SYS,
+        messages: (function() {
+          if (G.conversation.length <= 3) return G.conversation;
+          return [G.conversation[0], ...G.conversation.slice(-2)];
+        })(),
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        stream: true
+      })
+    });
+
+    if (!resp.ok) {
+      const e = await resp.json();
+      if (resp.status === 429 && attempt < 4) {
+        const wait = [20, 35, 60, 90][attempt];
+        setRefineProgress(Math.min(15 + G.searchCount * 3, 84), `Rate limit — retrying in ${wait}s…`);
+        await sleep(wait * 1000);
+        await runRefineStream(attempt + 1);
+        return;
+      }
+      throw new Error(e.error?.message || `Request failed (HTTP ${resp.status})`);
+    }
+
+    G.tokens.calls++;
+    updateTracker();
+
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', fullText = '', stopReason = null, inputTokens = 0, outputTokens = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+        let ev; try { ev = JSON.parse(raw); } catch { continue; }
+        if (ev.type === 'message_start' && ev.message?.usage) inputTokens = ev.message.usage.input_tokens || 0;
+        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') fullText += ev.delta.text;
+        if (ev.type === 'message_delta') { stopReason = ev.delta?.stop_reason; outputTokens = ev.usage?.output_tokens || 0; }
+        if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use' && ev.content_block.name === 'web_search') {
+          G.searchCount++;
+          document.getElementById('refine-search-ct').textContent = G.searchCount;
+          setRefineProgress(Math.min(15 + G.searchCount * 4, 84), `Searching… (${G.searchCount} done)`);
+        }
+      }
+    }
+
+    G.tokens.in += inputTokens;
+    G.tokens.out += outputTokens;
+    updateTracker();
+    G.conversation.push({ role: 'assistant', content: [{ type: 'text', text: fullText }] });
+
+    if (stopReason === 'tool_use') {
+      G.callCount++;
+      const isLong = G.callCount % 8 === 0;
+      if (isLong) {
+        let r = 20;
+        setRefineProgress(Math.min(15 + G.searchCount * 4, 84), `Pacing — resuming in ${r}s…`);
+        await new Promise(resolve => {
+          const t = setInterval(() => { r--; if (r <= 0) { clearInterval(t); resolve(); } else setRefineProgress(Math.min(15 + G.searchCount * 4, 84), `Pacing — resuming in ${r}s…`); }, 1000);
+        });
+      } else {
+        await sleep(3000);
+      }
+      await runRefineStream();
+      return;
+    }
+
+    // Parse updated MASTER_SOURCE
+    const match = fullText.match(/===MASTER_SOURCE_START===([\s\S]*?)===MASTER_SOURCE_END===/);
+    if (!match) {
+      G.conversation.push({ role: 'user', content: 'Now output the complete updated MASTER_SOURCE between ===MASTER_SOURCE_START=== and ===MASTER_SOURCE_END=== markers.' });
+      await runRefineStream();
+      return;
+    }
+
+    G.masterSource = match[1].trim();
+    localStorage.removeItem('cf_checkpoint');
+    logRunToFirestore('refine');
+
+    // Return to complete screen with updated data
+    setRefineProgress(100, 'Refinement complete');
+    document.getElementById('refine-dot').className = 'dot done';
+    document.getElementById('refine-pill').className = 'phase-pill complete';
+    document.getElementById('refine-pill').textContent = 'Complete';
+    setTimeout(() => showComplete(), 800);
+
+  } catch (err) {
+    if (G.tokens.in > 0) logRunToFirestore('failed');
+    showErr('refine-err', err.message);
+    document.getElementById('refine-input-box').style.display = 'block';
+    document.getElementById('refine-progress-wrap').style.display = 'none';
+    console.error(err);
+  }
+}
+
+// ═══════════════════════════════════════════
 // RESET
 // ═══════════════════════════════════════════
 function doReset() {
   G.topic = null; G.conversation = []; G.masterSource = null;
-  G.questions = []; G.searchCount = 0; G.callCount = 0;
+  G.questions = []; G.priorAnswers = []; G.searchCount = 0; G.callCount = 0;
   document.getElementById('topic-input').value = '';
   document.getElementById('q-loading').style.display = 'none';
   document.getElementById('q-box').style.display = 'none';
