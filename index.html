@@ -30,7 +30,6 @@
     const app = initializeApp(firebaseConfig);
     const db  = getFirestore(app);
 
-    // Expose to global scope for use in non-module scripts
     window._db          = db;
     window._fsCollection = collection;
     window._fsAddDoc    = addDoc;
@@ -78,7 +77,6 @@
       align-items: center;
     }
 
-    /* ── HEADER ── */
     header {
       width: 100%;
       border-bottom: 1px solid var(--border);
@@ -136,7 +134,6 @@
     .hdr-btn:hover { border-color: var(--ember-lo); color: var(--ember); }
     .hdr-btn.active { border-color: var(--ember-lo); color: var(--ember); background: var(--ember-glow); }
 
-    /* ── MAIN ── */
     main {
       width: 100%;
       max-width: 780px;
@@ -144,12 +141,10 @@
       flex: 1;
     }
 
-    /* ── SCREENS ── */
     .screen { display: none; animation: fadeIn 0.22s ease; }
     .screen.active { display: block; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
 
-    /* ── TYPOGRAPHY ── */
     .h1 {
       font-family: var(--ff-display);
       font-size: 2rem;
@@ -176,7 +171,6 @@
       margin-bottom: 2rem;
     }
 
-    /* ── FORM ── */
     .field { margin-bottom: 1.5rem; }
 
     label {
@@ -209,7 +203,6 @@
 
     textarea { resize: vertical; min-height: 76px; }
 
-    /* ── BUTTONS ── */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -255,7 +248,6 @@
 
     .btn-dl:hover { border-color: var(--ember-lo); color: var(--ember); background: var(--surface3); }
 
-    /* ── ERROR ── */
     .error {
       background: #1e0e0e;
       border: 1px solid #5a1818;
@@ -266,9 +258,9 @@
       border-radius: var(--r);
       margin-top: 1rem;
       display: none;
+      white-space: pre-wrap;
     }
 
-    /* ── RESEARCH SCREEN ── */
     .research-header {
       display: flex;
       align-items: center;
@@ -289,6 +281,7 @@
     .phase-pill.research   { background: var(--green-dim); color: #6dba8a; }
     .phase-pill.generating { background: var(--gold-dim); color: #e0b050; }
     .phase-pill.complete   { background: #1a3a28; color: #60c080; }
+    .phase-pill.pacing     { background: #2a2010; color: #c09040; }
 
     .progress-wrap { margin: 1rem 0 0.5rem; }
 
@@ -395,7 +388,6 @@
       50%{opacity:0.6;box-shadow:0 0 0 5px transparent}
     }
 
-    /* ── COMPLETE SCREEN ── */
     .complete-hero {
       display: flex;
       align-items: center;
@@ -430,7 +422,6 @@
 
     .dl-buttons { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 
-    /* ── DASHBOARD SCREEN ── */
     .dash-header {
       display: flex;
       justify-content: space-between;
@@ -529,7 +520,6 @@
       font-size: 0.91rem;
     }
 
-    /* ── TOKEN TRACKER ── */
     #tracker {
       position: fixed;
       bottom: 1rem;
@@ -570,65 +560,6 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-    /* ── MOBILE RESPONSIVE ── */
-    @media (max-width: 600px) {
-      header {
-        padding: 0.9rem 1rem;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-      .brand-name { font-size: 0.95rem; }
-      .brand-tag  { font-size: 0.96rem; }
-      #hdr-key-status { font-size: 0.96rem; }
-      .hdr-btn { font-size: 0.91rem; padding: 0.3rem 0.6rem; }
-
-      .screen { padding: 2rem 1.1rem; }
-
-      .screen-title { font-size: 1.6rem; }
-      .screen-sub   { font-size: 0.93rem; }
-
-      .card { padding: 1.2rem 1rem; }
-
-      input[type="password"],
-      input[type="text"],
-      textarea {
-        font-size: 1rem;
-        padding: 0.7rem 0.9rem;
-      }
-
-      .btn-primary {
-        width: 100%;
-        font-size: 0.96rem;
-        padding: 0.75rem 1rem;
-      }
-      .btn-ghost, .btn-dl {
-        width: 100%;
-        font-size: 0.93rem;
-        padding: 0.65rem 1rem;
-      }
-
-      .complete-stats {
-        grid-template-columns: 1fr 1fr;
-        gap: 0.7rem;
-      }
-      .complete-stat { font-size: 0.90rem; }
-
-      .t-row { font-size: 0.90rem; }
-
-      .output-box { font-size: 0.90rem; }
-
-      #tracker-widget {
-        right: 0.5rem;
-        left: 0.5rem;
-        width: auto;
-      }
-    }
-
-    @media (max-width: 400px) {
-      .screen-title { font-size: 1.35rem; }
-      .complete-stats { grid-template-columns: 1fr; }
-    }
-
     @media (max-width: 600px) {
       header { padding: 0.9rem 1rem; flex-wrap: wrap; gap: 0.5rem; }
       .brand-name { font-size: 0.95rem; }
@@ -636,9 +567,6 @@
       #hdr-key-status { font-size: 0.72rem; }
       .hdr-btn { font-size: 0.78rem; padding: 0.3rem 0.6rem; }
       .screen { padding: 2rem 1.1rem; }
-      .screen-title { font-size: 1.6rem; }
-      .screen-sub   { font-size: 0.93rem; }
-      .card { padding: 1.2rem 1rem; }
       input[type="password"], input[type="text"], textarea { font-size: 1rem; padding: 0.7rem 0.9rem; }
       .btn-primary { width: 100%; font-size: 0.96rem; padding: 0.75rem 1rem; }
       .btn-ghost, .btn-dl { width: 100%; font-size: 0.93rem; padding: 0.65rem 1rem; }
@@ -648,7 +576,6 @@
       #tracker-widget { right: 0.5rem; left: 0.5rem; width: auto; }
     }
     @media (max-width: 400px) {
-      .screen-title { font-size: 1.35rem; }
       .complete-stats { grid-template-columns: 1fr; }
     }
   </style>
@@ -668,7 +595,7 @@
 
 <main>
 
-  <!-- ── SCREEN: API KEY ── -->
+  <!-- SCREEN: API KEY -->
   <div class="screen active" id="scr-key">
     <p class="h1">Welcome.</p>
     <p class="subtitle">
@@ -688,7 +615,7 @@
     <div class="error" id="key-err"></div>
   </div>
 
-  <!-- ── SCREEN: TOPIC ── -->
+  <!-- SCREEN: TOPIC -->
   <div class="screen" id="scr-topic">
     <p class="h2">What should we research?</p>
     <p class="subtitle">
@@ -707,7 +634,7 @@
     <div class="error" id="topic-err"></div>
   </div>
 
-  <!-- ── SCREEN: RESEARCH ── -->
+  <!-- SCREEN: RESEARCH -->
   <div class="screen" id="scr-research">
     <div class="research-header">
       <div class="dot pulsing" id="res-dot"></div>
@@ -739,7 +666,7 @@
     <div class="error" id="res-err"></div>
   </div>
 
-  <!-- ── SCREEN: COMPLETE ── -->
+  <!-- SCREEN: COMPLETE -->
   <div class="screen" id="scr-complete">
     <div class="complete-hero">
       <div class="dot done"></div>
@@ -763,7 +690,7 @@
     <button class="btn btn-ghost" onclick="doReset()" style="margin-top:2rem">Research Another Topic</button>
   </div>
 
-  <!-- ── SCREEN: DASHBOARD ── -->
+  <!-- SCREEN: DASHBOARD -->
   <div class="screen" id="scr-dashboard">
     <div class="dash-header">
       <div>
@@ -837,6 +764,7 @@ let G = {
   masterSource: null,
   questions: [],
   searchCount: 0,
+  callCount: 0,          // ← NEW: tracks consecutive API calls for pacing
   tokens: { in: 0, out: 0, calls: 0 },
   streaming: false,
   prevScreen: 'topic'
@@ -941,8 +869,6 @@ RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anyt
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + id).classList.add('active');
-
-  // Update dashboard button highlight
   document.getElementById('dash-btn').classList.toggle('active', id === 'dashboard');
 }
 
@@ -977,6 +903,7 @@ async function doTopic() {
   G.topic = t;
   G.conversation = [];
   G.searchCount = 0;
+  G.callCount = 0;
   G.masterSource = null;
   G.tokens = { in: 0, out: 0, calls: 0 };
   hideErr('topic-err');
@@ -995,7 +922,6 @@ async function doTopic() {
 // ANSWERS → PHASE 2 (RESEARCH)
 // ═══════════════════════════════════════════
 async function doAnswers() {
-  // Validate — all questions must be answered
   let allAnswered = true;
   G.questions.forEach(q => {
     const el = document.getElementById(q.inputId);
@@ -1040,6 +966,9 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function runStream(phase, attempt = 0) {
   hideErr('res-err');
+  // Remove any stale partial recovery button
+  const oldBtn = document.getElementById('partial-recovery-btn');
+  if (oldBtn) oldBtn.remove();
   G.streaming = true;
 
   const cursorEl = document.createElement('span');
@@ -1078,7 +1007,7 @@ async function runStream(phase, attempt = 0) {
         await runStream(phase, attempt + 1);
         return;
       }
-      if (resp.status === 429) throw new Error('Usage limit reached. Please wait a moment and try again.');
+      if (resp.status === 429) throw new Error('Usage limit reached. Please wait 10–15 minutes and try again.');
       if (resp.status === 401) throw new Error('Invalid API key. Please re-enter your key.');
       if (resp.status === 500) throw new Error('Anthropic service error. Please try again shortly.');
       throw new Error(e.error?.message || `Request failed (HTTP ${resp.status})`);
@@ -1138,8 +1067,27 @@ async function runStream(phase, attempt = 0) {
 
     G.conversation.push({ role: 'assistant', content: [{ type: 'text', text: fullText }] });
 
+    // ── CHECKPOINT: save partial progress to localStorage after every API call ──
+    if (fullText.length > 200) {
+      localStorage.setItem('cf_checkpoint', JSON.stringify({
+        topic: G.topic,
+        text: fullText,
+        searches: G.searchCount,
+        ts: Date.now()
+      }));
+    }
+
     if (stopReason === 'tool_use') {
-      setProgress(Math.min(15 + G.searchCount * 1.8 + 8, 90), 'Continuing…');
+      // ── PACING: prevent rate limit storms ──
+      G.callCount++;
+      const isLongPause = G.callCount % 8 === 0;
+      const pauseMs     = isLongPause ? 20000 : 3000;
+      const pauseLabel  = isLongPause
+        ? `Pacing — resuming in 20s to stay within rate limits… (${G.searchCount} searches done)`
+        : `Continuing… (${G.searchCount} searches done)`;
+      setPill(isLongPause ? 'pacing' : 'research', isLongPause ? 'Pacing' : 'Stage 1–3 — Full Research');
+      setProgress(Math.min(15 + G.searchCount * 1.8 + 8, 90), pauseLabel);
+      await sleep(pauseMs);
       await runStream(phase);
       return;
     }
@@ -1149,15 +1097,49 @@ async function runStream(phase, attempt = 0) {
 
   } catch (err) {
     cursorEl.remove();
-    // Log partial run to Firestore even on failure
     if (G.tokens.in > 0 || G.tokens.out > 0) {
       logRunToFirestore('failed');
     }
-    showErr('res-err', err.message);
+    // ── PARTIAL RECOVERY: offer download of whatever was saved ──
+    const ckpt = localStorage.getItem('cf_checkpoint');
+    let errMsg = err.message;
+    if (ckpt) {
+      try {
+        const p = JSON.parse(ckpt);
+        if (p.topic === G.topic && p.text && p.text.length > 200) {
+          errMsg += '\n\nPartial results were auto-saved. Click below to download what was completed before the error.';
+          showPartialRecovery(p.text);
+        }
+      } catch(e) {}
+    }
+    showErr('res-err', errMsg);
     console.error(err);
   } finally {
     G.streaming = false;
   }
+}
+
+// ═══════════════════════════════════════════
+// PARTIAL RECOVERY BUTTON
+// ═══════════════════════════════════════════
+function showPartialRecovery(text) {
+  const existing = document.getElementById('partial-recovery-btn');
+  if (existing) existing.remove();
+  const btn = document.createElement('button');
+  btn.id = 'partial-recovery-btn';
+  btn.className = 'btn btn-ghost';
+  btn.style.cssText = 'margin-top:0.75rem;display:inline-flex;';
+  btn.textContent = '⬇ Download Partial Results';
+  btn.onclick = () => {
+    const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `PARTIAL_${slug(G.topic || 'results')}_${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  document.getElementById('res-err').after(btn);
 }
 
 // ═══════════════════════════════════════════
@@ -1210,6 +1192,7 @@ function parseResearch(text) {
   }
 
   G.masterSource = match[1].trim();
+  localStorage.removeItem('cf_checkpoint'); // ← clear checkpoint on success
   setProgress(100, 'Complete');
   setPill('complete', 'Complete');
   document.getElementById('res-dot').classList.remove('pulsing');
@@ -1445,7 +1428,7 @@ function updateTracker() {
 // ═══════════════════════════════════════════
 function doReset() {
   G.topic = null; G.conversation = []; G.masterSource = null;
-  G.questions = []; G.searchCount = 0;
+  G.questions = []; G.searchCount = 0; G.callCount = 0;
   document.getElementById('topic-input').value = '';
   document.getElementById('q-box').style.display = 'none';
   document.getElementById('q-items').innerHTML = '';
@@ -1488,6 +1471,7 @@ function hideErr(id) { document.getElementById(id).style.display = 'none'; }
 
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 function slug(str) { return str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+
 // Init: restore saved key on page load
 (function initSavedKey() {
   const saved = localStorage.getItem('cf_api_key');
