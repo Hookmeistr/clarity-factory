@@ -319,6 +319,7 @@
     .progress-label .searches span { color: var(--ember); }
 
     .stream-box {
+      display: none !important; /* Raw output hidden from user */
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r);
@@ -349,24 +350,26 @@
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
     .q-box {
-      background: var(--surface);
-      border: 1px solid var(--ember-lo);
-      border-left: 3px solid var(--ember);
-      border-radius: var(--r);
-      padding: 1.25rem 1.5rem;
+      background: var(--surface2);
+      border: 2px solid var(--ember);
+      border-radius: 6px;
+      padding: 1.8rem;
       margin-top: 1.5rem;
-      display: none;
     }
 
     .q-box h3 {
       font-family: var(--ff-display);
-      font-size: 0.94rem;
-      color: var(--ember);
-      letter-spacing: 0.06em;
-      margin-bottom: 1rem;
+      font-size: 1.15rem;
+      color: var(--text-bright);
+      margin-bottom: 1.2rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid var(--border2);
     }
 
-    .q-item { margin-bottom: 1.2rem; }
+    .q-item { margin-bottom: 1.5rem; }
+    .q-text { font-size: 1rem; color: var(--text-bright); margin-bottom: 0.5rem; font-weight: 600; line-height: 1.5; }
+    .q-item textarea { width: 100%; font-size: 0.96rem; padding: 0.7rem; background: var(--surface3); border: 1px solid var(--border2); border-radius: 3px; color: var(--text-bright); font-family: var(--ff-body); resize: vertical; }
+    .q-item textarea:focus { border-color: var(--ember); outline: none; }
     .q-item:last-child { margin-bottom: 0; }
 
     .q-text {
@@ -702,9 +705,9 @@
     <div class="stream-box" id="stream-box"></div>
 
     <div class="q-box" id="q-box">
-      <h3>A couple of quick questions</h3>
+      <h3>⬇ Please answer these questions before continuing</h3>
       <div id="q-items"></div>
-      <button class="btn" onclick="doAnswers()" style="margin-top:1rem">Continue Research →</button>
+      <button class="btn btn-primary" onclick="doAnswers()" style="margin-top:1.2rem;width:100%;font-size:1rem;padding:0.85rem">Submit Answers &amp; Run Full Research →</button>
     </div>
 
     <div class="error" id="res-err"></div>
@@ -988,7 +991,9 @@ async function doAnswers() {
 // ═══════════════════════════════════════════
 // CORE STREAMING FUNCTION
 // ═══════════════════════════════════════════
-async function runStream(phase) {
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runStream(phase, attempt = 0) {
   hideErr('res-err');
   G.streaming = true;
 
@@ -1008,7 +1013,12 @@ async function runStream(phase) {
         model: MODEL,
         max_tokens: phase === 'research' ? 12000 : 4096,
         system: SYS,
-        messages: G.conversation,
+        messages: (function() {
+          // Keep only the last 3 messages to reduce input tokens
+          // Always keep the first user message (topic/phase marker)
+          if (G.conversation.length <= 3) return G.conversation;
+          return [G.conversation[0], ...G.conversation.slice(-2)];
+        })(),
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         stream: true
       })
@@ -1016,7 +1026,24 @@ async function runStream(phase) {
 
     if (!resp.ok) {
       const e = await resp.json();
-      throw new Error(e.error?.message || `HTTP ${resp.status}`);
+      const msg = e.error?.message || '';
+      if (resp.status === 429 && attempt < 4) {
+        const wait = [20, 35, 60, 90][attempt];
+        setProgress(
+          Math.min(15 + G.searchCount * 1.8, 84),
+          `Rate limit reached — retrying in ${wait}s…`
+        );
+        cursorEl.remove();
+        G.streaming = false;
+        await sleep(wait * 1000);
+        await runStream(phase, attempt + 1);
+        return;
+      }
+      // Friendly error messages
+      if (resp.status === 429) throw new Error('Usage limit reached. Please wait a minute and try again.');
+      if (resp.status === 401) throw new Error('API key invalid. Please re-enter your key.');
+      if (resp.status === 500) throw new Error('Anthropic service error. Please try again in a moment.');
+      throw new Error(msg || `Request failed (HTTP ${resp.status})`);
     }
 
     G.tokens.calls++;
@@ -1118,7 +1145,9 @@ function parseDiscovery(text) {
   });
 
   document.getElementById('q-box').style.display = 'block';
-  setProgress(12, 'Waiting for your answers…');
+  setProgress(12, 'Ready for your answers…');
+  // Scroll to questions
+  document.getElementById('q-box').scrollIntoView({ behavior: 'smooth', block: 'start' });
   setPill('discovery', 'Stage 0 — Questions');
 }
 
