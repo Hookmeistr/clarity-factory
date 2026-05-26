@@ -671,14 +671,25 @@
     <p class="h2">What should we research?</p>
     <p class="subtitle">
       Name a product category. The Clarity Factory discovers what matters, runs 25–50 live searches,
-      and delivers a complete buyer's guide with downloadable files.
+      and delivers a complete buyer's guide with a downloadable source file.
     </p>
 
     <div class="field">
       <label for="topic-input">Research Topic</label>
       <input type="text" id="topic-input"
-             placeholder="e.g.  robot vacuums  ·  standing desks  ·  pellet grills  ·  e-bikes"
+             placeholder="e.g.  wigs  ·  robot vacuums  ·  standing desks  ·  pellet grills"
              onkeydown="if(event.key==='Enter')doTopic()">
+      <p style="font-size:0.84rem;color:var(--text-faint);margin-top:0.5rem;line-height:1.55;">
+        A single word works (e.g. <em>wigs</em>). Adding details helps focus the results — for example,
+        <em>synthetic blend monofilament wigs under $200</em> will produce more targeted questions
+        and sharper recommendations in the next step.
+      </p>
+    </div>
+
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);padding:0.75rem 1rem;margin-bottom:1.25rem;font-family:var(--ff-mono);font-size:0.84rem;color:var(--text-dim);line-height:1.55;">
+      ⏱ &nbsp;<strong style="color:var(--text);">Allow 15–20 minutes between research runs.</strong>
+      Each run makes dozens of live AI calls — starting a new run too soon after a previous one
+      may trigger processing limits and cause the run to fail or retry repeatedly.
     </div>
 
     <button class="btn" onclick="doTopic()">Begin Research →</button>
