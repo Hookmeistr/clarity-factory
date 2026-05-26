@@ -365,6 +365,24 @@
     .q-item textarea:focus { border-color: var(--ember); outline: none; }
     .q-item:last-child { margin-bottom: 0; }
 
+    .q-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.65rem;
+      padding: 0.55rem 0.75rem;
+      margin-bottom: 0.4rem;
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .q-option:hover { border-color: var(--ember-lo); background: var(--surface2); }
+    .q-option input[type="radio"],
+    .q-option input[type="checkbox"] { margin-top: 2px; accent-color: var(--ember); flex-shrink: 0; width: 15px; height: 15px; cursor: pointer; }
+    .q-option-label { font-family: var(--ff-body); font-size: 0.96rem; color: var(--text-bright); line-height: 1.45; cursor: pointer; }
+    .q-option-letter { font-family: var(--ff-mono); font-size: 0.84rem; color: var(--ember); font-weight: 600; flex-shrink: 0; min-width: 18px; }
+
     .q-text {
       font-size: 0.96rem;
       color: var(--text-bright);
@@ -654,7 +672,11 @@
 
     <div class="stream-box" id="stream-box"></div>
 
-    <div class="q-box" id="q-box">
+    <div id="q-loading" style="display:none;margin-top:1.5rem;padding:1.2rem 1.4rem;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;font-family:var(--ff-mono);font-size:0.93rem;color:var(--text-dim);text-align:center;">
+      ⏳ &nbsp;Preparing your questions — please wait, this takes a moment…
+    </div>
+
+    <div class="q-box" id="q-box" style="display:none;">
       <h3>&#8595; Please answer all questions before continuing</h3>
       <div id="q-items"></div>
       <div id="q-hint" style="display:none;color:var(--ember);font-size:0.93rem;margin-top:0.9rem;padding:0.6rem 0.9rem;background:var(--ember-glow);border-radius:3px;">
@@ -791,9 +813,23 @@ Run 6–10 web searches to map the category:
 
 After searching, output a brief 2–4 paragraph summary of what you found. Then output your clarifying questions in this EXACT format:
 
+CRITICAL QUESTION RULES:
+1. Plain English only — no jargon, no technical terms, no acronyms
+2. Every question with options MUST list every option explicitly — never say "pick one or more" without listing what those options are
+3. TYPE must be "single" (pick one) or "multi" (pick one or more)
+4. Always provide 2–4 short, clear option labels
+
 QUESTIONS_START
-Q1: [First question — something that genuinely changes research scope]
-Q2: [Second question — only if genuinely needed; omit if one is enough]
+Q1: [Plain English question — no jargon]
+TYPE: single
+A: [Option A — short, plain label]
+B: [Option B — short, plain label]
+C: [Option C — short, plain label]
+Q2: [Plain English question — no jargon. Only include if it genuinely changes research scope.]
+TYPE: multi
+A: [Option A]
+B: [Option B]
+C: [Option C]
 QUESTIONS_END
 
 ━━━ [PHASE:RESEARCH] ━━━
@@ -915,6 +951,11 @@ async function doTopic() {
   clearStream();
 
   G.conversation.push({ role: 'user', content: `[PHASE:DISCOVERY]\n\nTopic: ${t}\n\nRun your discovery searches and ask clarifying questions.` });
+
+  // Show loading state for q-box
+  document.getElementById('q-loading').style.display = 'block';
+  document.getElementById('q-box').style.display = 'none';
+
   await runStream('discovery');
 }
 
@@ -923,28 +964,40 @@ async function doTopic() {
 // ═══════════════════════════════════════════
 async function doAnswers() {
   let allAnswered = true;
-  G.questions.forEach(q => {
-    const el = document.getElementById(q.inputId);
-    const ans = el.value.trim();
-    if (!ans) {
-      el.style.borderColor = 'var(--ember)';
-      el.placeholder = 'Please answer this question before continuing…';
-      allAnswered = false;
+  const parts = [];
+
+  G.questions.forEach((q, qi) => {
+    if (q.options.length > 0) {
+      const inputType = q.type === 'multi' ? 'checkbox' : 'radio';
+      const groupName = `q-group-${qi}`;
+      const checked = [...document.querySelectorAll(`input[name="${groupName}"]:checked`)].map(el => el.value);
+      if (checked.length === 0) {
+        allAnswered = false;
+        // Highlight the q-item
+        const items = document.querySelectorAll('.q-option');
+        items.forEach(el => { if (el.querySelector(`input[name="${groupName}"]`)) el.style.borderColor = 'var(--ember)'; });
+      } else {
+        parts.push(`${q.label}\nAnswer: ${checked.join(', ')}`);
+      }
     } else {
-      el.style.borderColor = '';
+      const el = document.getElementById(q.inputId);
+      const ans = el ? el.value.trim() : '';
+      if (!ans) {
+        el.style.borderColor = 'var(--ember)';
+        el.placeholder = 'Please answer this question before continuing…';
+        allAnswered = false;
+      } else {
+        el.style.borderColor = '';
+        parts.push(`${q.label}\nAnswer: ${ans}`);
+      }
     }
   });
+
   if (!allAnswered) {
     const hint = document.getElementById('q-hint');
-    if (hint) { hint.style.display = 'block'; }
+    if (hint) hint.style.display = 'block';
     return;
   }
-
-  const parts = [];
-  G.questions.forEach(q => {
-    const ans = document.getElementById(q.inputId).value.trim();
-    parts.push(`${q.label}\nAnswer: ${ans}`);
-  });
 
   document.getElementById('q-box').style.display = 'none';
   clearStream();
@@ -1082,12 +1135,24 @@ async function runStream(phase, attempt = 0) {
       G.callCount++;
       const isLongPause = G.callCount % 8 === 0;
       const pauseMs     = isLongPause ? 20000 : 3000;
-      const pauseLabel  = isLongPause
-        ? `Pacing — resuming in 20s to stay within rate limits… (${G.searchCount} searches done)`
-        : `Continuing… (${G.searchCount} searches done)`;
-      setPill(isLongPause ? 'pacing' : 'research', isLongPause ? 'Pacing' : 'Stage 1–3 — Full Research');
-      setProgress(Math.min(15 + G.searchCount * 1.8 + 8, 90), pauseLabel);
-      await sleep(pauseMs);
+
+      if (isLongPause) {
+        setPill('pacing', 'Pacing');
+        // Live countdown for the 20-second pause
+        let remaining = 20;
+        setProgress(Math.min(15 + G.searchCount * 1.8 + 8, 90), `Pacing — resuming in ${remaining}s to stay within rate limits…`);
+        await new Promise(resolve => {
+          const tick = setInterval(() => {
+            remaining--;
+            if (remaining <= 0) { clearInterval(tick); resolve(); }
+            else setProgress(Math.min(15 + G.searchCount * 1.8 + 8, 90), `Pacing — resuming in ${remaining}s… (${G.searchCount} searches done)`);
+          }, 1000);
+        });
+      } else {
+        setProgress(Math.min(15 + G.searchCount * 1.8 + 8, 90), `Continuing… (${G.searchCount} searches done)`);
+        await sleep(pauseMs);
+      }
+
       await runStream(phase);
       return;
     }
@@ -1146,6 +1211,8 @@ function showPartialRecovery(text) {
 // PARSE DISCOVERY
 // ═══════════════════════════════════════════
 function parseDiscovery(text) {
+  document.getElementById('q-loading').style.display = 'none';
+
   const qMatch = text.match(/QUESTIONS_START\s*([\s\S]*?)\s*QUESTIONS_END/);
   if (!qMatch) {
     G.conversation.push({ role: 'user', content: '[PHASE:RESEARCH]\n\nNo clarifying questions needed — proceed with full research and generate the MASTER_SOURCE.' });
@@ -1153,23 +1220,65 @@ function parseDiscovery(text) {
     return;
   }
 
-  const qLines = qMatch[1].trim().split('\n').filter(l => l.match(/^Q\d+:/i));
-  G.questions = qLines.map((l, i) => ({
-    label: l.replace(/^Q\d+:\s*/i, '').trim(),
-    inputId: `q-ans-${i}`
-  }));
+  // Parse structured questions with options
+  const block = qMatch[1].trim();
+  const qBlocks = block.split(/(?=^Q\d+:)/m).filter(b => b.trim());
+
+  G.questions = qBlocks.map((b, i) => {
+    const lines = b.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    const label = lines[0].replace(/^Q\d+:\s*/i, '').trim();
+    const typeLine = lines.find(l => l.match(/^TYPE:/i));
+    const type = typeLine ? typeLine.replace(/^TYPE:\s*/i,'').trim().toLowerCase() : 'single';
+    const options = lines
+      .filter(l => l.match(/^[A-Z]:\s/))
+      .map(l => ({ letter: l[0], text: l.slice(3).trim() }));
+    return { label, type, options, inputId: `q-ans-${i}` };
+  });
 
   const container = document.getElementById('q-items');
   container.innerHTML = '';
-  G.questions.forEach(q => {
+
+  G.questions.forEach((q, qi) => {
     const div = document.createElement('div');
     div.className = 'q-item';
-    div.innerHTML = `<div class="q-text">${esc(q.label)}</div><textarea id="${q.inputId}" rows="2" placeholder="Your answer…"></textarea>`;
+
+    const qText = document.createElement('div');
+    qText.className = 'q-text';
+    qText.textContent = q.label;
+    div.appendChild(qText);
+
+    const typeHint = document.createElement('div');
+    typeHint.style.cssText = 'font-family:var(--ff-mono);font-size:0.82rem;color:var(--text-faint);margin-bottom:0.55rem;';
+    typeHint.textContent = q.type === 'multi' ? 'Select all that apply:' : 'Select one:';
+    div.appendChild(typeHint);
+
+    if (q.options.length > 0) {
+      // Render as radio buttons or checkboxes
+      const inputType = q.type === 'multi' ? 'checkbox' : 'radio';
+      const groupName = `q-group-${qi}`;
+      q.options.forEach(opt => {
+        const lbl = document.createElement('label');
+        lbl.className = 'q-option';
+        lbl.innerHTML = `
+          <input type="${inputType}" name="${groupName}" id="${q.inputId}-${opt.letter}" value="${esc(opt.text)}">
+          <span class="q-option-letter">${opt.letter}.</span>
+          <span class="q-option-label">${esc(opt.text)}</span>`;
+        div.appendChild(lbl);
+      });
+    } else {
+      // Fallback: free-text textarea
+      const ta = document.createElement('textarea');
+      ta.id = q.inputId;
+      ta.rows = 2;
+      ta.placeholder = 'Your answer…';
+      div.appendChild(ta);
+    }
+
     container.appendChild(div);
   });
 
   document.getElementById('q-box').style.display = 'block';
-  setProgress(12, 'Your answers needed below…');
+  setProgress(12, 'Please answer the questions below…');
   setTimeout(() => document.getElementById('q-box').scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
   setPill('discovery', 'Stage 0 — Questions');
 }
@@ -1430,6 +1539,7 @@ function doReset() {
   G.topic = null; G.conversation = []; G.masterSource = null;
   G.questions = []; G.searchCount = 0; G.callCount = 0;
   document.getElementById('topic-input').value = '';
+  document.getElementById('q-loading').style.display = 'none';
   document.getElementById('q-box').style.display = 'none';
   document.getElementById('q-items').innerHTML = '';
   document.getElementById('res-dot').classList.remove('done');
