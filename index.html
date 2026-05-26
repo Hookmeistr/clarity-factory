@@ -698,14 +698,14 @@
     <div id="complete-stats"></div>
 
     <div class="dl-section">
-      <h3>Your Deliverables</h3>
+      <h3>Your Deliverable</h3>
       <div class="dl-buttons">
-        <button class="btn btn-dl" onclick="dlMarkdown()">📄 MASTER_SOURCE.md</button>
-        <button class="btn btn-dl" onclick="dlExcel()">📊 Guide Comparison.xlsx</button>
+        <button class="btn btn-dl" onclick="dlMarkdown()">📄 Download MASTER_SOURCE.md</button>
       </div>
-      <p style="font-size:0.89rem;color:var(--text-faint);margin-top:0.85rem;line-height:1.5">
-        The .md file is the source of truth. The .xlsx is generated from it.<br>
-        Next quarterly update due in 3 months — re-upload the .md and run UPDATE_RUNNER_PROMPT.
+      <p style="font-size:0.89rem;color:var(--text-faint);margin-top:0.85rem;line-height:1.6">
+        This .md file is the source of truth for your guide.<br><br>
+        <strong style="color:var(--text-dim)">To get your Word document:</strong> Upload this file to Claude and ask it to generate the buyer's guide Word doc. Claude will produce a formatted .docx with comparison tables, product cards, and all sections.<br><br>
+        <strong style="color:var(--text-dim)">Quarterly updates:</strong> Re-upload the .md to Claude and run UPDATE_RUNNER_PROMPT. Next update due in 3 months.
       </p>
     </div>
 
@@ -811,13 +811,22 @@ Run 6–10 web searches to map the category:
 - Any notable new entrants or discontinued products in the last 12–18 months
 - Any new form factors, fuel types, or accessory categories
 
-After searching, output a brief 2–4 paragraph summary of what you found. Then output your clarifying questions in this EXACT format:
+After searching, do the following in order:
+
+STEP 1 — PURCHASE DECISION ANALYSIS (internal reasoning — do not show to user):
+Ask yourself: what are the natural decision-making variables a typical buyer of this product uses to choose the right one? These are the dimensions where a wrong assumption leads to buyer regret.
+Examples: wigs = length, budget, fiber type, cap construction, heat styling, wear frequency, lace preference, medical vs fashion. E-bikes = budget, terrain, commute distance, motor type, cargo needs.
+For each variable ask: would knowing this materially change which products I recommend? If yes, it is a question candidate.
+Then filter out anything: (a) the buyer would naturally volunteer unprompted, (b) discoverable through research, or (c) not genuinely decision-changing.
+The result is your question list. Simple categories need 2–3 questions. Complex categories need 4–6. Never exceed 7. Quality over quantity — every question must change the output.
+
+STEP 2 — OUTPUT questions in this EXACT format:
 
 CRITICAL QUESTION RULES:
 1. Plain English only — no jargon, no technical terms, no acronyms
-2. Every question with options MUST list every option explicitly — never say "pick one or more" without listing what those options are
-3. TYPE must be "single" (pick one) or "multi" (pick one or more)
-4. Always provide 2–4 short, clear option labels
+2. Every question MUST list all options explicitly — never say pick one or more without listing what those options are
+3. TYPE must be single (pick one) or multi (pick one or more)
+4. Always provide 2–4 short, clear option labels per question
 
 QUESTIONS_START
 Q1: [Plain English question — no jargon]
@@ -825,7 +834,7 @@ TYPE: single
 A: [Option A — short, plain label]
 B: [Option B — short, plain label]
 C: [Option C — short, plain label]
-Q2: [Plain English question — no jargon. Only include if it genuinely changes research scope.]
+Q2: [Continue for as many questions as the topic requires — see Step 1]
 TYPE: multi
 A: [Option A]
 B: [Option B]
