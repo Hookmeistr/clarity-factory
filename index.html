@@ -19,6 +19,8 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
     import { getFirestore, collection, addDoc, getDocs, orderBy, query } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+    import { getAuth, signInWithCredential, GoogleAuthProvider, onAuthStateChanged, signOut }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyApwbUUT_XeixGvxCduZ8iBkt7tdwvXdvQ",
@@ -29,15 +31,41 @@
       appId: "1:895721792752:web:8738716cbe13ded3130e35"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
+    const app  = initializeApp(firebaseConfig);
+    const db   = getFirestore(app);
+    const auth = getAuth(app);
 
     window._db          = db;
+    window._auth        = auth;
     window._fsCollection = collection;
     window._fsAddDoc    = addDoc;
     window._fsGetDocs   = getDocs;
     window._fsOrderBy   = orderBy;
     window._fsQuery     = query;
+
+    // Bridge: exchange the Google access token (from Google Sign-In) for a Firebase
+    // session, so Firestore rules can verify who is asking.
+    window._firebaseSignInWithGoogleToken = async (accessToken) => {
+      try {
+        const cred = GoogleAuthProvider.credential(null, accessToken);
+        const res  = await signInWithCredential(auth, cred);
+        window._firebaseUserEmail = res.user && res.user.email;
+        window.dispatchEvent(new Event('firebaseAuthChanged'));
+        return true;
+      } catch (e) {
+        console.warn('Firebase sign-in failed:', e.code || e.message);
+        window._firebaseAuthError = e.code || e.message;
+        window.dispatchEvent(new Event('firebaseAuthChanged'));
+        return false;
+      }
+    };
+    window._firebaseSignOut = () => signOut(auth).catch(() => {});
+
+    onAuthStateChanged(auth, (u) => {
+      window._firebaseUserEmail = u ? u.email : null;
+      window.dispatchEvent(new Event('firebaseAuthChanged'));
+    });
+
     window._firebaseReady = true;
     window.dispatchEvent(new Event('firebaseReady'));
   </script>
@@ -1017,6 +1045,9 @@ const MONTHLY_COLLECTION = 'clarity_factory_monthly';
 // are folded into an anonymous monthly total (no topic, no per-run history).
 const OWNER_EMAIL = 'patrick.massengale@gmail.com';
 function isOwnerUser() {
+  // Prefer the Firebase-verified email (this is what Firestore rules enforce).
+  const verified = window._firebaseUserEmail;
+  if (verified) return verified.toLowerCase() === OWNER_EMAIL;
   return !!(googleAuth && googleAuth.profile && googleAuth.profile.email
             && googleAuth.profile.email.toLowerCase() === OWNER_EMAIL);
 }
@@ -2450,6 +2481,10 @@ function onTokenResponse(resp) {
     googleAuth.profile = { name: p.name, email: p.email, picture: p.picture };
     localStorage.setItem('cf_google_profile', JSON.stringify(googleAuth.profile));
     updateAuthUI(true);
+    // Bridge into Firebase so Firestore rules can verify identity
+    if (window._firebaseSignInWithGoogleToken) {
+      window._firebaseSignInWithGoogleToken(googleAuth.token);
+    }
     ensureReportsFolder();
     loadHistory();
   }).catch(() => updateAuthUI(true));
@@ -2492,6 +2527,7 @@ function signOutGoogle() {
   googleAuth.token = null;
   googleAuth.profile = null;
   localStorage.removeItem('cf_google_profile');
+  if (window._firebaseSignOut) window._firebaseSignOut();
   updateAuthUI(false);
 }
 
@@ -2768,6 +2804,11 @@ async function saveNamedGuideToDrive(name, content) {
 }
 
 applyOwnerVisibility();
+window.addEventListener('firebaseAuthChanged', () => {
+  applyOwnerVisibility();
+  const scr = document.getElementById('scr-dashboard');
+  if (scr && scr.classList.contains('active') && isOwnerUser()) loadDashboard();
+});
 initGoogleAuth();
 
 </script>
