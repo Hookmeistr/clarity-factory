@@ -15,6 +15,51 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <!-- GUIDE VIEWER styles (added 2026-08-04) -->
+  <style id="gv-style">
+  #gv-bar{display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem;}
+  #gv-status{font-family:var(--ff-mono);font-size:0.82rem;color:var(--text-faint);}
+  #gv-page{background:#fff;color:#1a1a1a;border-radius:var(--r);padding:3rem 3.4rem;
+    font:16px/1.62 "Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif;}
+  #gv-page h1{font-size:1.95rem;line-height:1.24;margin:0 0 .35rem;color:#12181d;letter-spacing:-.3px;}
+  #gv-page h2{font-size:1.32rem;margin:2.2rem 0 .7rem;padding-bottom:.4rem;border-bottom:2px solid #0b6b5b;color:#12181d;}
+  #gv-page h3{font-size:1.08rem;margin:1.5rem 0 .5rem;color:#22303c;}
+  #gv-page h4{font-size:.98rem;margin:1.1rem 0 .4rem;color:#22303c;}
+  #gv-page p{margin:0 0 .75rem;}
+  #gv-page ul,#gv-page ol{margin:0 0 .85rem;padding-left:1.4rem;}
+  #gv-page li{margin:0 0 .35rem;}
+  #gv-page a{color:#0a5ea8;}
+  #gv-page hr{border:0;border-top:1px solid #dfe3e8;margin:1.8rem 0;}
+  #gv-page blockquote{margin:0 0 .85rem;padding:.5rem .9rem;border-left:3px solid #dfe3e8;
+    color:#5c6470;background:#fafbfc;}
+  #gv-page code{background:#f2f4f6;padding:1px 5px;border-radius:3px;font-size:.92em;color:#1a1a1a;}
+  #gv-page .gv-sub{color:#5c6470;font-size:.95rem;margin:0 0 .2rem;}
+  #gv-page .gv-meta{color:#5c6470;font-size:.82rem;margin:0 0 1.9rem;font-family:var(--ff-mono);}
+  #gv-page table{border-collapse:collapse;width:100%;margin:0 0 1.1rem;font-size:.87rem;}
+  #gv-page th,#gv-page td{border:1px solid #dfe3e8;padding:.5rem .6rem;text-align:left;vertical-align:top;}
+  #gv-page th{background:#e8f3f0;font-weight:600;}
+  #gv-page tbody tr:nth-child(even){background:#fafbfc;}
+  #gv-page .gv-badge{display:inline-block;font-size:.68rem;font-weight:700;letter-spacing:.5px;
+    padding:2px 8px;border-radius:11px;white-space:nowrap;border:1px solid transparent;vertical-align:middle;}
+  #gv-page .gv-badge.exact{color:#0b6b5b;background:#e6f4f0;border-color:#bcded4;}
+  #gv-page .gv-badge.most{color:#8a5a00;background:#fdf3e0;border-color:#f0dcb4;}
+  #gv-page .gv-badge.min{color:#7a2e2e;background:#fbeaea;border-color:#eecccc;}
+  @media print{
+    @page{size:Letter;margin:.75in;}
+    body{background:#fff!important;}
+    header,nav,#gv-bar,.hdr-btn,#auth-status{display:none!important;}
+    .screen{display:none!important;}
+    .screen#scr-guideview{display:block!important;}
+    main,main.wide{max-width:none!important;width:auto!important;padding:0!important;margin:0!important;}
+    #gv-page{padding:0!important;border-radius:0!important;background:#fff!important;}
+    #gv-page h2,#gv-page h3,#gv-page h4{page-break-after:avoid;break-after:avoid;}
+    #gv-page tr{page-break-inside:avoid;break-inside:avoid;}
+    #gv-page thead{display:table-header-group;}
+    #gv-page a{color:#0a5ea8;text-decoration:underline;}
+    #gv-page a[href^="http"]::after{content:" (" attr(href) ")";font-size:9px;color:#666;word-break:break-all;}
+  }
+  </style>
   <!-- Firebase -->
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
@@ -1016,6 +1061,20 @@
     </div>
 
     <div id="guides-list"></div>
+  </div>
+
+  <!-- SCREEN: GUIDE VIEWER (added 2026-08-04) -->
+  <div class="screen" id="scr-guideview">
+    <div id="gv-bar">
+      <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="showGuides()">← My Guides</button>
+      <span id="gv-status"></span>
+      <span style="flex:1"></span>
+      <button class="btn" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvPrint()">Save as PDF / Print</button>
+      <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvDocx()">Download Word (.docx)</button>
+      <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvHtml()">Download HTML</button>
+      <button class="btn btn-refine" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvRerun()">🔧 Re-run with edits</button>
+    </div>
+    <div id="gv-page"></div>
   </div>
 
   <!-- SCREEN: DASHBOARD -->
@@ -3043,7 +3102,7 @@ async function loadHistory() {
     // With the drive.file scope Drive only ever returns files this app created,
     // so we can list them directly rather than depending on the folder lookup.
     const q = encodeURIComponent("trashed=false and mimeType != 'application/vnd.google-apps.folder'");
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=100`, {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime,modifiedTime)&orderBy=createdTime desc&pageSize=100`, {
       headers: { Authorization: 'Bearer ' + googleAuth.token }
     });
     if (!res.ok) { console.warn('history http', res.status); return []; }
@@ -3070,6 +3129,284 @@ function prettyTopicFromName(name) {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/* ══════════════════════════════════════════════════════════
+   GUIDE VIEWER — one styled HTML source, three outputs
+   Screen · Print/PDF · Word (.docx). Added 2026-08-04.
+   ══════════════════════════════════════════════════════════ */
+
+function fmtStamp(iso) {
+  if (!iso) return 'date unknown';
+  const d = new Date(iso);
+  if (isNaN(d)) return 'date unknown';
+  return d.toLocaleString(undefined, {
+    day:'numeric', month:'short', year:'numeric',
+    hour:'numeric', minute:'2-digit', timeZoneName:'short'
+  });
+}
+
+const GV_TIER = {
+  'meets exact criteria':   ['exact','Meets Exact Criteria'],
+  'meets most criteria':    ['most','Meets Most Criteria'],
+  'meets many criteria':    ['most','Meets Most Criteria'],
+  'meets minimal criteria': ['min','Meets Minimal Criteria']
+};
+
+function gvInline(s) {
+  s = esc(s);
+  s = s.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, (m,t,u)=>`<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
+  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m,p,u)=>`${p}<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // Tier badges — match however the model wrote them
+  s = s.replace(/(?:\[|\b)(MEETS (?:EXACT|MOST|MANY|MINIMAL) CRITERIA)\]?/gi, (m, txt) => {
+    const hit = GV_TIER[txt.toLowerCase()];
+    if (!hit) return m;
+    return `<span class="gv-badge ${hit[0]}">${hit[1]}</span>`;
+  });
+  return s;
+}
+
+function gvTable(rows) {
+  const cells = r => r.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+  const head = cells(rows[0]);
+  const body = rows.slice(2).map(cells);
+  let h = '<table><thead><tr>' + head.map(c=>`<th>${gvInline(c)}</th>`).join('') + '</tr></thead><tbody>';
+  body.forEach(r => { h += '<tr>' + r.map(c=>`<td>${gvInline(c)}</td>`).join('') + '</tr>'; });
+  return h + '</tbody></table>';
+}
+
+function gvMdToHtml(md) {
+  const lines = String(md||'').replace(/\r/g,'').split('\n');
+  let out = '', i = 0;
+  while (i < lines.length) {
+    const L = lines[i];
+    if (/^\s*$/.test(L)) { i++; continue; }
+    if (/^#{1,4}\s/.test(L)) {
+      const n = L.match(/^#+/)[0].length;
+      out += `<h${n}>${gvInline(L.replace(/^#+\s*/,''))}</h${n}>`; i++; continue;
+    }
+    if (/^---+\s*$/.test(L) || /^___+\s*$/.test(L)) { out += '<hr>'; i++; continue; }
+    if (/^\|/.test(L)) {
+      const rows = [];
+      while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      out += (rows.length >= 2) ? gvTable(rows) : `<p>${gvInline(rows.join(' '))}</p>`;
+      continue;
+    }
+    if (/^>\s?/.test(L)) {
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/,''));
+      out += `<blockquote>${gvInline(buf.join(' '))}</blockquote>`; continue;
+    }
+    if (/^\s*[-*+]\s+/.test(L)) {
+      const buf = [];
+      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) buf.push(lines[i++].replace(/^\s*[-*+]\s+/,''));
+      out += '<ul>' + buf.map(b=>`<li>${gvInline(b)}</li>`).join('') + '</ul>'; continue;
+    }
+    if (/^\s*\d+\.\s+/.test(L)) {
+      const buf = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) buf.push(lines[i++].replace(/^\s*\d+\.\s+/,''));
+      out += '<ol>' + buf.map(b=>`<li>${gvInline(b)}</li>`).join('') + '</ol>'; continue;
+    }
+    const buf = [];
+    while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^[|>#]|^---+|^\s*[-*+]\s|^\s*\d+\.\s/.test(lines[i])) buf.push(lines[i++]);
+    if (buf.length) out += `<p>${gvInline(buf.join(' '))}</p>`; else i++;
+  }
+  return out;
+}
+
+function showGuideView() {
+  const created = (G.history || []).find(f => prettyTopicFromName(f.name) === G.topic);
+  const stamp = created ? fmtStamp(created.createdTime || created.modifiedTime) : fmtStamp(new Date().toISOString());
+  document.getElementById('gv-page').innerHTML =
+    `<h1>Buyer's Guide: ${esc(G.topic)}</h1>
+     <p class="gv-sub">The Clarity Factory · Comprehensive · Current · On Demand</p>
+     <p class="gv-meta">${esc(stamp)}</p>` + gvMdToHtml(G.masterSource);
+  document.getElementById('gv-status').textContent = '';
+  showScreen('guideview');
+}
+
+function gvRerun() { showRefine(); }
+function gvPrint() { window.print(); }
+
+/* ---------- Word (.docx) export — no external library ---------- */
+const GV_CRC = (() => { const t = new Uint32Array(256);
+  for (let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; }
+  return t; })();
+function gvCrc32(b){ let c=0xFFFFFFFF; for(let i=0;i<b.length;i++) c = GV_CRC[(c^b[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+
+function gvZip(files) {
+  const encU = new TextEncoder(), parts=[], central=[]; let off=0;
+  const u16 = v => [v&255,(v>>8)&255];
+  const u32 = v => [v&255,(v>>8)&255,(v>>16)&255,(v>>24)&255];
+  files.forEach(f => {
+    const name = encU.encode(f.name), data = f.data, c = gvCrc32(data);
+    const lh = [...u32(0x04034b50),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+                ...u32(c),...u32(data.length),...u32(data.length),...u16(name.length),...u16(0)];
+    parts.push(new Uint8Array(lh), name, data);
+    central.push(new Uint8Array([...u32(0x02014b50),...u16(20),...u16(20),...u16(0),...u16(0),...u16(0),...u16(0),
+      ...u32(c),...u32(data.length),...u32(data.length),...u16(name.length),
+      ...u16(0),...u16(0),...u16(0),...u16(0),...u32(0),...u32(off)]), name);
+    off += lh.length + name.length + data.length;
+  });
+  let cdLen = 0; central.forEach(p => cdLen += p.length);
+  const eocd = new Uint8Array([...u32(0x06054b50),...u16(0),...u16(0),
+    ...u16(files.length),...u16(files.length),...u32(cdLen),...u32(off),...u16(0)]);
+  return new Blob([...parts,...central,eocd],
+    {type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+}
+
+const GVX = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function gvDocxBuild() {
+  const rels = [];
+  const addRel = (type, target, ext) => {
+    const id = 'rId' + (100 + rels.length);
+    rels.push(`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"${ext?' TargetMode="External"':''}/>`);
+    return id;
+  };
+  addRel('styles','styles.xml'); addRel('numbering','numbering.xml');
+
+  function runs(node, st) {
+    st = st || {}; let out = '';
+    node.childNodes.forEach(n => {
+      if (n.nodeType === 3) {
+        const t = n.nodeValue; if (!t) return;
+        const rpr = (st.b?'<w:b/>':'') + (st.i?'<w:i/>':'') +
+          (st.badge?`<w:b/><w:color w:val="${st.badge}"/>`:'') +
+          (st.link?'<w:rStyle w:val="Hyperlink"/>':'');
+        out += `<w:r>${rpr?`<w:rPr>${rpr}</w:rPr>`:''}<w:t xml:space="preserve">${GVX(t)}</w:t></w:r>`;
+        return;
+      }
+      if (n.nodeType !== 1) return;
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'a' && n.href) {
+        const id = addRel('hyperlink', n.href, true);
+        out += `<w:hyperlink r:id="${id}">${runs(n, Object.assign({}, st, {link:1}))}</w:hyperlink>`;
+      } else if (n.classList && n.classList.contains('gv-badge')) {
+        const col = n.classList.contains('exact') ? '0B6B5B' : n.classList.contains('most') ? '8A5A00' : '7A2E2E';
+        out += `<w:r><w:rPr><w:b/><w:color w:val="${col}"/></w:rPr><w:t xml:space="preserve">  [${GVX(n.textContent)}]</w:t></w:r>`;
+      } else if (tag === 'strong' || tag === 'b') out += runs(n, Object.assign({}, st, {b:1}));
+      else if (tag === 'em' || tag === 'i')       out += runs(n, Object.assign({}, st, {i:1}));
+      else out += runs(n, st);
+    });
+    return out;
+  }
+  const para = (inner, style, extra) => `<w:p><w:pPr>${style?`<w:pStyle w:val="${style}"/>`:''}${extra||''}</w:pPr>${inner}</w:p>`;
+
+  function tableXml(tbl) {
+    const rows = [].slice.call(tbl.querySelectorAll('tr'));
+    if (!rows.length) return '';
+    const ncol = rows[0].children.length, w = Math.floor(9360/ncol);
+    let x = `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="9360" w:type="dxa"/><w:tblBorders>` +
+      ['top','left','bottom','right','insideH','insideV'].map(s=>`<w:${s} w:val="single" w:sz="4" w:space="0" w:color="DFE3E8"/>`).join('') +
+      `</w:tblBorders></w:tblPr><w:tblGrid>` + Array(ncol).fill(`<w:gridCol w:w="${w}"/>`).join('') + `</w:tblGrid>`;
+    rows.forEach(tr => {
+      const head = tr.parentNode.tagName.toLowerCase() === 'thead';
+      x += `<w:tr>${head?'<w:trPr><w:tblHeader/></w:trPr>':''}`;
+      [].slice.call(tr.children).forEach(td => {
+        x += `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${head?'<w:shd w:val="clear" w:fill="E8F3F0"/>':''}</w:tcPr>` +
+             para(runs(td,{b:head}), null, '<w:spacing w:before="20" w:after="20"/>') + `</w:tc>`;
+      });
+      x += `</w:tr>`;
+    });
+    return x + `</w:tbl>` + para('');
+  }
+
+  function walk(node) {
+    let body = '';
+    [].slice.call(node.children).forEach(el => {
+      const tag = el.tagName.toLowerCase();
+      if (/^h[1-4]$/.test(tag)) { body += para(runs(el), 'Heading'+tag[1]); return; }
+      if (tag === 'p') { body += para(runs(el), el.classList.contains('gv-sub')||el.classList.contains('gv-meta') ? 'Subtle' : null); return; }
+      if (tag === 'ul' || tag === 'ol') {
+        [].slice.call(el.children).forEach(li => {
+          body += para(runs(li), null, `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${tag==='ul'?1:2}"/></w:numPr><w:spacing w:after="60"/>`);
+        });
+        return;
+      }
+      if (tag === 'table') { body += tableXml(el); return; }
+      if (tag === 'blockquote') { body += para(runs(el), null, '<w:ind w:left="360"/><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="DFE3E8"/></w:pBdr>'); return; }
+      if (tag === 'hr') { body += para('', null, '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="DFE3E8"/></w:pBdr>'); return; }
+      body += walk(el);
+    });
+    return body;
+  }
+
+  const body = walk(document.getElementById('gv-page'));
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080"/></w:sectPr></w:body></w:document>`;
+
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>
+<w:pPrDefault><w:pPr><w:spacing w:after="140" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="120" w:after="80"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="52"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="320" w:after="100"/><w:pBdr><w:bottom w:val="single" w:sz="12" w:space="4" w:color="0B6B5B"/></w:pBdr><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:pPr><w:spacing w:before="220" w:after="80"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:pPr><w:spacing w:before="180" w:after="60"/></w:pPr><w:rPr><w:b/><w:sz w:val="23"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Subtle"><w:name w:val="Subtle"/><w:rPr><w:color w:val="5C6470"/><w:sz w:val="20"/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0A5EA8"/><w:u w:val="single"/></w:rPr></w:style>
+<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/></w:style></w:styles>`;
+
+  const numbering = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="&#8226;"/><w:pPr><w:ind w:left="502" w:hanging="288"/></w:pPr></w:lvl></w:abstractNum>
+<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="502" w:hanging="288"/></w:pPr></w:lvl></w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`;
+
+  const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>`;
+
+  const e = new TextEncoder();
+  return gvZip([
+    {name:'[Content_Types].xml', data:e.encode(ct)},
+    {name:'_rels/.rels', data:e.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`)},
+    {name:'word/document.xml', data:e.encode(doc)},
+    {name:'word/styles.xml', data:e.encode(styles)},
+    {name:'word/numbering.xml', data:e.encode(numbering)},
+    {name:'word/_rels/document.xml.rels', data:e.encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels.join('')}</Relationships>`)}
+  ]);
+}
+
+function gvDocx() {
+  const st = document.getElementById('gv-status');
+  try {
+    st.textContent = 'Building Word document…';
+    gvSave(gvDocxBuild(), slug(G.topic) + '.docx');
+    st.textContent = 'Word document downloaded.';
+  } catch (err) {
+    st.textContent = 'Word export failed: ' + err.message;
+    console.error(err);
+  }
+}
+
+function gvSave(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+
+function gvHtml() {
+  const css = document.getElementById('gv-style') ? document.getElementById('gv-style').textContent : '';
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(G.topic)}</title>
+<style>body{background:#fff;color:#1a1a1a;font:16px/1.6 "Segoe UI",Arial,sans-serif;max-width:860px;margin:40px auto;padding:0 24px}
+${css.replace(/#gv-page\s?/g,'body ').replace(/\.screen[^{]*{[^}]*}/g,'')}</style></head>
+<body>${document.getElementById('gv-page').innerHTML}</body></html>`;
+  gvSave(new Blob([html], {type:'text/html'}), slug(G.topic) + '.html');
+  document.getElementById('gv-status').textContent = 'HTML downloaded.';
+}
+
 async function showGuides() {
   showScreen('guides');
   try { await ensureToken(); } catch(e) {}
@@ -3088,7 +3425,7 @@ async function loadMyGuides() {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem;margin-bottom:0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);">
       <div style="min-width:0;">
         <div style="font-family:var(--ff-display);font-size:1.02rem;color:var(--text-bright);font-weight:600;">${esc(prettyTopicFromName(f.name))}</div>
-        <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);margin-top:0.2rem;">Updated ${new Date(f.modifiedTime).toLocaleDateString()} · ${esc(f.name)}</div>
+        <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);margin-top:0.2rem;">Created ${fmtStamp(f.createdTime || f.modifiedTime)} · ${esc(f.name)}</div>
       </div>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="openGuide('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">Open</button>
@@ -3131,7 +3468,7 @@ async function openGuide(fileId, name) {
     G.topic = prettyTopicFromName(name);
     G.topPicks = extractTopPicksFromMd(content);
     G.searchCount = G.searchCount || 0;
-    showComplete();
+    showGuideView();
   } catch (e) {
     alert('Could not open that guide. Please try again.');
   }
