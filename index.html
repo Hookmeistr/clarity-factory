@@ -922,6 +922,8 @@
       </div>
     </div>
 
+    <div id="dash-others" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.1rem;margin-bottom:1.25rem;"></div>
+
     <div class="dash-table-wrap">
       <table>
         <thead>
@@ -985,6 +987,14 @@ const MODEL     = 'claude-sonnet-4-6';
 const PRICE_IN  = 3  / 1_000_000;
 const PRICE_OUT = 15 / 1_000_000;
 const COLLECTION = 'clarity_factory_runs';
+const MONTHLY_COLLECTION = 'clarity_factory_monthly';
+// Only this account's runs are stored as individual rows. Everyone else's runs
+// are folded into an anonymous monthly total (no topic, no per-run history).
+const OWNER_EMAIL = 'patrick.massengale@gmail.com';
+function isOwnerUser() {
+  return !!(googleAuth && googleAuth.profile && googleAuth.profile.email
+            && googleAuth.profile.email.toLowerCase() === OWNER_EMAIL);
+}
 
 // ═══════════════════════════════════════════
 // SYSTEM PROMPT
@@ -1620,22 +1630,40 @@ async function logRunToFirestore(status = 'complete') {
   }
   try {
     const cost = costTotal();
-    await window._fsAddDoc(
-      window._fsCollection(window._db, COLLECTION),
-      {
-        topic:       G.topic || '(unknown)',
-        date:        new Date().toISOString(),
-        searches:    G.searchCount,
-        inputTokens: G.tokens.in,
-        outputTokens:G.tokens.out,
-        cost:        parseFloat(cost.toFixed(6)),
-        status:      status,
-        timestamp:   Date.now()
-      }
-    );
-    console.log('Run logged to Firestore:', status);
+    if (isOwnerUser()) {
+      // Owner: full per-run row (permanent personal history)
+      await window._fsAddDoc(
+        window._fsCollection(window._db, COLLECTION),
+        {
+          topic:       G.topic || '(unknown)',
+          date:        new Date().toISOString(),
+          searches:    G.searchCount,
+          inputTokens: G.tokens.in,
+          outputTokens:G.tokens.out,
+          cost:        parseFloat(cost.toFixed(6)),
+          status:      status,
+          timestamp:   Date.now(),
+          owner:       true
+        }
+      );
+    } else {
+      // Everyone else: anonymous monthly aggregate only — no topic, no history
+      const now = new Date();
+      const monthKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      await window._fsAddDoc(
+        window._fsCollection(window._db, MONTHLY_COLLECTION),
+        {
+          month:       monthKey,
+          cost:        parseFloat(cost.toFixed(6)),
+          runs:        1,
+          status:      status,
+          timestamp:   Date.now()
+        }
+      );
+    }
+    console.log('Run logged:', status);
   } catch (e) {
-    console.warn('Firestore log failed:', e.message);
+    console.warn('Cost log failed:', e.message);
   }
 }
 
@@ -1659,6 +1687,45 @@ async function loadDashboard() {
     const runs = [];
     snap.forEach(doc => runs.push(doc.data()));
 
+    // Pull anonymous monthly totals from other users (no per-run history stored)
+    let otherCost = 0, otherRuns = 0, monthly = {};
+    try {
+      const msnap = await window._fsGetDocs(window._fsCollection(window._db, MONTHLY_COLLECTION));
+      msnap.forEach(d => {
+        const m = d.data();
+        otherCost += (m.cost || 0);
+        otherRuns += (m.runs || 1);
+        if (!monthly[m.month]) monthly[m.month] = { cost: 0, runs: 0 };
+        monthly[m.month].cost += (m.cost || 0);
+        monthly[m.month].runs += (m.runs || 1);
+      });
+    } catch (e) { console.warn('monthly totals unavailable', e.message); }
+
+    // Render "other users" summary block
+    const othersEl = document.getElementById('dash-others');
+    if (othersEl) {
+      if (otherRuns > 0) {
+        const rows = Object.keys(monthly).sort().reverse().map(k =>
+          `<div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid var(--border);font-family:var(--ff-mono);font-size:0.86rem;">
+             <span style="color:var(--text-dim)">${k}</span>
+             <span style="color:var(--text-dim)">${monthly[k].runs} run${monthly[k].runs===1?'':'s'}</span>
+             <span style="color:var(--ember)">$${monthly[k].cost.toFixed(4)}</span>
+           </div>`).join('');
+        othersEl.style.display = 'block';
+        othersEl.innerHTML =
+          `<h3 style="font-family:var(--ff-display);font-size:0.95rem;color:var(--text-bright);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:0.7rem;">Other Users — Monthly Totals</h3>
+           <p style="font-size:0.83rem;color:var(--text-faint);margin-bottom:0.6rem;line-height:1.5;">Aggregated only. No topics or per-run history are stored for other users.</p>
+           ${rows}
+           <div style="display:flex;justify-content:space-between;padding-top:0.6rem;font-family:var(--ff-mono);font-size:0.9rem;">
+             <span style="color:var(--text-bright)">All time</span>
+             <span style="color:var(--text-bright)">${otherRuns} runs</span>
+             <span style="color:var(--ember)">$${otherCost.toFixed(4)}</span>
+           </div>`;
+      } else {
+        othersEl.style.display = 'none';
+      }
+    }
+
     if (runs.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" class="dash-empty">No guide runs logged yet. Run your first research topic to see data here.</td></tr>';
       document.getElementById('dash-total-cost').textContent = '$0.00';
@@ -1667,11 +1734,13 @@ async function loadDashboard() {
       return;
     }
 
-    const totalCost = runs.reduce((s, r) => s + (r.cost || 0), 0);
-    const avgCost   = totalCost / runs.length;
+    const myCost    = runs.reduce((s, r) => s + (r.cost || 0), 0);
+    const totalCost = myCost + otherCost;
+    const totalRuns = runs.length + otherRuns;
+    const avgCost   = totalRuns ? totalCost / totalRuns : 0;
 
     document.getElementById('dash-total-cost').textContent = '$' + totalCost.toFixed(4);
-    document.getElementById('dash-total-runs').textContent = runs.length;
+    document.getElementById('dash-total-runs').textContent = totalRuns;
     document.getElementById('dash-avg-cost').textContent   = '$' + avgCost.toFixed(4);
 
     tbody.innerHTML = runs.map(r => {
@@ -2305,12 +2374,29 @@ function handleAuthClick() {
     alert('Google sign-in isn\'t set up yet. The app owner needs to add a Google OAuth Client ID. For now, you can run guides and download PDF/.md reports without signing in.');
     return;
   }
-  if (googleAuth.profile) {
-    // Signed in — offer sign out
+  if (googleAuth.profile && googleAuth.token) {
+    // Fully signed in — offer sign out
     if (confirm('Sign out of Google?')) signOutGoogle();
   } else {
-    googleAuth.tokenClient.requestAccessToken({ prompt: 'consent' });
+    // Not signed in, or session restored without a live token — get a token
+    googleAuth.tokenClient.requestAccessToken({ prompt: googleAuth.profile ? '' : 'consent' });
   }
+}
+
+// Ensure we have a live Drive token before any Drive operation
+function ensureToken() {
+  return new Promise((resolve, reject) => {
+    if (googleAuth.token) return resolve(googleAuth.token);
+    if (!googleAuth.ready || !googleAuth.tokenClient) return reject(new Error('auth not ready'));
+    const prevCb = googleAuth.tokenClient.callback;
+    googleAuth.tokenClient.callback = (resp) => {
+      googleAuth.tokenClient.callback = prevCb;
+      onTokenResponse(resp);
+      if (resp.error) reject(new Error(resp.error));
+      else resolve(resp.access_token);
+    };
+    googleAuth.tokenClient.requestAccessToken({ prompt: googleAuth.profile ? '' : 'consent' });
+  });
 }
 
 function signOutGoogle() {
@@ -2347,7 +2433,7 @@ function updateAuthUI(signedIn) {
 
 // Find or create the Reports folder in the user's Drive
 async function ensureReportsFolder() {
-  if (!googleAuth.token) return null;
+  try { await ensureToken(); } catch(e) { return null; }
   try {
     const q = encodeURIComponent(`name='${REPORTS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
     const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
@@ -2403,7 +2489,7 @@ async function saveGuideToDrive() {
 
 // Load past guides from the user's Drive (history)
 async function loadHistory() {
-  if (!googleAuth.token) return [];
+  try { await ensureToken(); } catch(e) { return []; }
   await ensureReportsFolder();
   if (!googleAuth.folderId) return [];
   try {
@@ -2435,8 +2521,8 @@ function prettyTopicFromName(name) {
 }
 
 async function showGuides() {
-  if (!googleAuth.profile) { handleAuthClick(); return; }
   showScreen('guides');
+  try { await ensureToken(); } catch(e) {}
   loadMyGuides();
 }
 
@@ -2515,9 +2601,10 @@ async function rerunGuide(fileId, name) {
 
 // Import the two pre-existing guides into the user's Drive library (one-time)
 async function importPastGuides() {
-  if (!googleAuth.token) { handleAuthClick(); return; }
   const btn = document.getElementById('import-btn');
   const status = document.getElementById('import-status');
+  try { await ensureToken(); }
+  catch (e) { status.textContent = 'Please sign in first.'; status.style.color = 'var(--ember)'; return; }
   btn.disabled = true;
   const seeds = [
     { file: 'guides/outdoor_cooking.md', name: 'outdoor_cooking_2026-05-25.md' },
