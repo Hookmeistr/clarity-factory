@@ -734,6 +734,7 @@
       <span id="auth-label">Sign in</span>
     </div>
     <button class="hdr-btn" id="guides-btn" onclick="showGuides()" style="display:none;">📚 My Guides</button>
+    <button class="hdr-btn" id="prefs-btn" onclick="showPrefs()" style="display:none;">⚙ Preferences</button>
     <button class="hdr-btn" id="dash-btn" onclick="showDashboard()" style="display:none;">📊 Cost Dashboard</button>
     <div id="hdr-key-status" style="display:none;">No key loaded</div>
   </div>
@@ -945,11 +946,55 @@
       <div id="sharpen-additions" style="font-size:0.88rem;color:var(--text-dim);line-height:1.6;"></div>
     </div>
 
+    <div id="pref-checklist-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:0.9rem 1rem;margin-bottom:1.25rem;">
+      <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.55rem;">Previously known preferences</div>
+      <p style="font-size:0.83rem;color:var(--text-faint);margin-bottom:0.6rem;line-height:1.5;">Ticked ones look relevant to this topic and will be added to the brief. Untick anything that doesn't apply right now.</p>
+      <div id="pref-checklist"></div>
+      <div style="display:flex;gap:0.5rem;margin-top:0.7rem;">
+        <input type="text" id="pref-new-input" placeholder="Add another preference for this run…"
+               style="flex:1;font-size:0.88rem;padding:0.45rem 0.7rem;"
+               onkeydown="if(event.key==='Enter')addPrefFromInput()">
+        <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="addPrefFromInput()">Add</button>
+      </div>
+    </div>
+
+    <div id="pref-remember-wrap" style="display:none;background:var(--surface2);border-left:3px solid var(--green,#4a8);border-radius:var(--r);padding:0.85rem 1rem;margin-bottom:1.25rem;">
+      <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;">
+        <input type="checkbox" id="pref-remember" checked style="margin-top:0.25rem;">
+        <span style="font-size:0.89rem;color:var(--text-dim);line-height:1.55;">
+          <strong style="color:var(--text-bright);">Remember these for future guides</strong><br>
+          <span id="pref-remember-list" style="font-size:0.85rem;"></span>
+        </span>
+      </label>
+    </div>
+
     <div style="display:flex;gap:0.7rem;flex-wrap:wrap;">
       <button class="btn btn-primary" onclick="acceptSharpened()">Use this brief &#8594;</button>
       <button class="btn btn-ghost" onclick="useOriginalRequest()">Use my original wording</button>
     </div>
     <div class="err" id="sharpen-err" style="display:none;margin-top:0.9rem;"></div>
+  </div>
+
+  <!-- SCREEN: PREFERENCES -->
+  <div class="screen" id="scr-prefs">
+    <div class="dash-header">
+      <div>
+        <p class="h2" style="margin-bottom:0.25rem">Preferences</p>
+        <p style="font-family:var(--ff-mono);font-size:0.87rem;color:var(--text-dim)">Remembered across guides · Stored in your Google Drive</p>
+      </div>
+      <button class="btn btn-ghost" onclick="showPrefs()">↺ Refresh</button>
+    </div>
+    <p style="font-size:0.9rem;color:var(--text-faint);line-height:1.6;margin-bottom:1.25rem;">
+      These are general preferences carried over between guides. Before each run you choose which ones apply —
+      nothing here is forced onto a guide where it doesn't fit.
+    </p>
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.25rem;">
+      <input type="text" id="prefs-add-input" placeholder="Add a preference, e.g. prefers USB-C charging"
+             style="flex:1;font-size:0.92rem;padding:0.55rem 0.8rem;"
+             onkeydown="if(event.key==='Enter')prefsAdd()">
+      <button class="btn" style="margin-top:0;padding:0.55rem 1.1rem;" onclick="prefsAdd()">Add</button>
+    </div>
+    <div id="prefs-list"></div>
   </div>
 
   <!-- SCREEN: MY GUIDES -->
@@ -1237,10 +1282,12 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + id).classList.add('active');
   const mainEl = document.querySelector('main');
-  if (mainEl) mainEl.classList.toggle('wide', id === 'dashboard' || id === 'guides');
+  if (mainEl) mainEl.classList.toggle('wide', id === 'dashboard' || id === 'guides' || id === 'prefs');
   document.getElementById('dash-btn').classList.toggle('active', id === 'dashboard');
   const gb = document.getElementById('guides-btn');
   if (gb) gb.classList.toggle('active', id === 'guides');
+  const pb = document.getElementById('prefs-btn');
+  if (pb) pb.classList.toggle('active', id === 'prefs');
 }
 
 function goHome() {
@@ -2479,6 +2526,70 @@ function paintVersion(version, d) {
 })();
 
 
+
+// ═══════════════════════════════════════════
+// PORTABLE PREFERENCES — remembered across guides, stored in the user's own Drive.
+// Only preferences that transfer between product categories are kept.
+// ═══════════════════════════════════════════
+const PREFS_FILENAME = 'clarity_factory_preferences.json';
+let userPrefs = { items: [], fileId: null, loaded: false };
+
+async function loadPreferences() {
+  if (!googleAuth.token) { userPrefs.loaded = true; return userPrefs.items; }
+  try {
+    const q = encodeURIComponent("name='" + PREFS_FILENAME + "' and trashed=false");
+    const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)', {
+      headers: { Authorization: 'Bearer ' + googleAuth.token }
+    });
+    const data = await res.json();
+    if (data.files && data.files.length) {
+      userPrefs.fileId = data.files[0].id;
+      const content = await driveDownloadFile(userPrefs.fileId);
+      const parsed = JSON.parse(content);
+      userPrefs.items = Array.isArray(parsed.items) ? parsed.items : [];
+    }
+  } catch (e) { console.warn('prefs load', e.message); }
+  userPrefs.loaded = true;
+  return userPrefs.items;
+}
+
+async function savePreferences() {
+  if (!googleAuth.token) return false;
+  const body = JSON.stringify({ items: userPrefs.items, updated: new Date().toISOString() }, null, 2);
+  try {
+    if (userPrefs.fileId) {
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + userPrefs.fileId + '?uploadType=media', {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'application/json' },
+        body
+      });
+      return res.ok;
+    }
+    await ensureReportsFolder();
+    const meta = { name: PREFS_FILENAME, parents: googleAuth.folderId ? [googleAuth.folderId] : undefined };
+    const boundary = 'cf_p_' + Date.now();
+    const multipart =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+      JSON.stringify(meta) +
+      `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+      body + `\r\n--${boundary}--`;
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body: multipart
+    });
+    if (res.ok) { const j = await res.json(); userPrefs.fileId = j.id; return true; }
+  } catch (e) { console.warn('prefs save', e.message); }
+  return false;
+}
+
+function addPreference(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  if (userPrefs.items.some(x => x.toLowerCase() === t.toLowerCase())) return;
+  userPrefs.items.push(t);
+}
+
 // ═══════════════════════════════════════════
 // REQUEST SHARPENING — turn a plain request into a rigorous research brief.
 // Shown to the user for approval before any research runs (never silent).
@@ -2506,10 +2617,26 @@ DO NOT:
 - Narrow the scope beyond what they asked.
 - Change their intent.
 
+STORED PREFERENCES:
+You may be given the buyer's saved preferences from earlier guides. Judge each one
+against THIS product category and mark it relevant ONLY if it genuinely applies here.
+A charging-port preference is irrelevant to wigs; a country-of-origin preference
+usually applies anywhere. When in doubt, mark it not relevant.
+
+NEW PORTABLE PREFERENCES:
+Separately, identify any preference in this request that would PLAUSIBLY CARRY OVER to a
+completely different product category. Keep these general and reusable.
+- Portable: "prefers USB-C charging", "wants USA-made options flagged",
+  "prefers non-China manufacturing where available", "wants warranty length called out"
+- NOT portable (never return these): specifics of this product or use case, such as
+  ingredients, vessel sizes, this category's brands, budgets, or one-off constraints.
+
 Return ONLY valid JSON, no markdown fences, no preamble:
 {
   "brief": "the sharpened research brief as plain text",
-  "additions": ["short plain-language note of each thing you inferred rather than were told"]
+  "additions": ["short plain-language note of each thing you inferred rather than were told"],
+  "relevantStoredPreferences": ["exact text of each stored preference that applies here"],
+  "newPortablePreferences": ["short general preference worth remembering for future guides"]
 }
 If the request is already precise and nothing needs sharpening, return the original
 wording as "brief" and an empty "additions" array.`;
@@ -2520,6 +2647,7 @@ async function sharpenRequest(rawText, contextNote, onAccept) {
   // Nothing to sharpen
   if (!rawText || rawText.trim().length < 12) { onAccept(rawText); return; }
 
+  if (!userPrefs.loaded) await loadPreferences();
   sharpenPending = { original: rawText, onAccept };
   document.getElementById('sharpen-original').textContent = rawText;
   document.getElementById('sharpen-text').value = 'Working on it…';
@@ -2541,7 +2669,13 @@ async function sharpenRequest(rawText, contextNote, onAccept) {
         max_tokens: 4000,
         output_config: { effort: SHARPEN_EFFORT },
         system: SHARPEN_SYS,
-        messages: [{ role: 'user', content: (contextNote ? contextNote + '\n\n' : '') + 'Request:\n' + rawText }]
+        messages: [{ role: 'user', content:
+          (contextNote ? contextNote + '\n\n' : '') +
+          (userPrefs.items.length
+            ? 'Stored preferences from this buyer\'s earlier guides:\n' +
+              userPrefs.items.map(x => '- ' + x).join('\n') + '\n\n'
+            : '') +
+          'Request:\n' + rawText }]
       })
     });
     if (!resp.ok) throw new Error('status ' + resp.status);
@@ -2571,6 +2705,12 @@ async function sharpenRequest(rawText, contextNote, onAccept) {
         adds.map(a => '&bull; ' + esc(a)).join('<br>');
       document.getElementById('sharpen-additions-wrap').style.display = 'block';
     }
+
+    const relevant = Array.isArray(parsed.relevantStoredPreferences) ? parsed.relevantStoredPreferences : [];
+    sharpenPending.newPortable = Array.isArray(parsed.newPortablePreferences)
+      ? parsed.newPortablePreferences.filter(Boolean) : [];
+    renderPrefChecklist(relevant);
+    renderRememberBox(sharpenPending.newPortable);
   } catch (e) {
     // If sharpening fails, fall back to the user's own words rather than blocking the run
     document.getElementById('sharpen-text').value = rawText;
@@ -2578,10 +2718,104 @@ async function sharpenRequest(rawText, contextNote, onAccept) {
   }
 }
 
-function acceptSharpened() {
-  const text = document.getElementById('sharpen-text').value.trim();
+
+async function showPrefs() {
+  showScreen('prefs');
+  const list = document.getElementById('prefs-list');
+  list.innerHTML = '<p style="color:var(--text-faint);font-family:var(--ff-mono);font-size:0.9rem;">Loading…</p>';
+  try { await ensureToken(); } catch (e) {}
+  userPrefs.loaded = false;
+  await loadPreferences();
+  renderPrefsList();
+}
+
+function renderPrefsList() {
+  const list = document.getElementById('prefs-list');
+  if (!userPrefs.items.length) {
+    list.innerHTML = '<p style="color:var(--text-faint);font-family:var(--ff-mono);font-size:0.9rem;">No preferences remembered yet. They build up as you run guides.</p>';
+    return;
+  }
+  list.innerHTML = userPrefs.items.map((item, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:0.8rem 1rem;margin-bottom:0.6rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);">
+      <span style="font-size:0.94rem;color:var(--text-bright);line-height:1.5;">${esc(item)}</span>
+      <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.4rem 0.75rem;color:#c07070;border-color:#5a3a3a;flex-shrink:0;" onclick="prefsRemove(${i})">Remove</button>
+    </div>`).join('');
+}
+
+function prefsAdd() {
+  const input = document.getElementById('prefs-add-input');
+  const val = input.value.trim();
+  if (!val) return;
+  addPreference(val);
+  input.value = '';
+  renderPrefsList();
+  savePreferences();
+}
+
+function prefsRemove(i) {
+  userPrefs.items.splice(i, 1);
+  renderPrefsList();
+  savePreferences();
+}
+
+function renderPrefChecklist(relevant) {
+  const wrap = document.getElementById('pref-checklist-wrap');
+  const list = document.getElementById('pref-checklist');
+  if (!userPrefs.items.length) { wrap.style.display = 'none'; return; }
+  const rel = (relevant || []).map(x => x.toLowerCase().trim());
+  list.innerHTML = userPrefs.items.map((item, i) => {
+    const on = rel.some(r => r === item.toLowerCase().trim() || item.toLowerCase().includes(r) || r.includes(item.toLowerCase()));
+    return `<label style="display:flex;align-items:flex-start;gap:0.55rem;padding:0.3rem 0;cursor:pointer;">
+      <input type="checkbox" class="pref-cb" value="${esc(item)}" ${on ? 'checked' : ''} style="margin-top:0.25rem;">
+      <span style="font-size:0.89rem;color:${on ? 'var(--text-bright)' : 'var(--text-faint)'};line-height:1.5;">${esc(item)}</span>
+    </label>`;
+  }).join('');
+  wrap.style.display = 'block';
+}
+
+function addPrefFromInput() {
+  const input = document.getElementById('pref-new-input');
+  const val = input.value.trim();
+  if (!val) return;
+  addPreference(val);
+  const checked = [...document.querySelectorAll('.pref-cb:checked')].map(c => c.value);
+  checked.push(val);
+  renderPrefChecklist(checked);
+  input.value = '';
+}
+
+function renderRememberBox(newPortable) {
+  const wrap = document.getElementById('pref-remember-wrap');
+  const fresh = (newPortable || []).filter(p =>
+    !userPrefs.items.some(x => x.toLowerCase() === p.toLowerCase()));
+  if (!fresh.length) { wrap.style.display = 'none'; return; }
+  document.getElementById('pref-remember-list').innerHTML =
+    fresh.map(p => '&bull; ' + esc(p)).join('<br>');
+  wrap.style.display = 'block';
+}
+
+async function acceptSharpened() {
+  let text = document.getElementById('sharpen-text').value.trim();
   if (!text) { showErr('sharpen-err', 'The brief cannot be empty.'); return; }
   const p = sharpenPending; sharpenPending = null;
+
+  // Fold in the preferences the user left ticked
+  const chosen = [...document.querySelectorAll('.pref-cb:checked')].map(c => c.value);
+  if (chosen.length) {
+    text += '\n\nSTANDING PREFERENCES (from this buyer\'s earlier guides):\n' +
+            chosen.map(c => '- ' + c).join('\n');
+  }
+
+  // Remember new portable preferences if the box is ticked
+  const rememberEl = document.getElementById('pref-remember');
+  if (rememberEl && rememberEl.checked && p && p.newPortable && p.newPortable.length) {
+    p.newPortable.forEach(addPreference);
+    savePreferences();
+  }
+  // Persist any manually added ones too
+  chosen.forEach(addPreference);
+  savePreferences();
+
   if (p && p.onAccept) p.onAccept(text);
 }
 
@@ -2731,6 +2965,7 @@ function updateAuthUI(signedIn) {
     box.title = 'Signed in as ' + googleAuth.profile.email + ' — click to sign out';
     if (nudge) nudge.style.display = 'none';
     const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = '';
+    const pb = document.getElementById('prefs-btn'); if (pb) pb.style.display = '';
     applyOwnerVisibility();
   } else {
     box.classList.remove('signed-in');
@@ -2739,6 +2974,7 @@ function updateAuthUI(signedIn) {
     box.title = 'Sign in to save your guides across devices';
     if (nudge) nudge.style.display = 'block';
     const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = 'none';
+    const pb = document.getElementById('prefs-btn'); if (pb) pb.style.display = 'none';
     applyOwnerVisibility();
   }
 }
