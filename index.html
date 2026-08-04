@@ -2681,6 +2681,7 @@ async function loadMyGuides() {
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="openGuide('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">Open</button>
         <button class="btn btn-refine" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="rerunGuide('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">🔧 Re-run with edits</button>
+        <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.75rem;color:#c07070;border-color:#5a3a3a;" onclick="deleteGuide('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')" title="Remove from your library">🗑</button>
       </div>
     </div>`).join('');
 }
@@ -2737,7 +2738,23 @@ async function rerunGuide(fileId, name) {
   }
 }
 
-// Import the two pre-existing guides into the user's Drive library (one-time)
+async function deleteGuide(fileId, name) {
+  if (!confirm('Remove "' + prettyTopicFromName(name) + '" from your library?\n\nThis moves the file to your Google Drive trash.')) return;
+  try {
+    await ensureToken();
+    const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trashed: true })
+    });
+    if (!res.ok) throw new Error('status ' + res.status);
+    await loadMyGuides();
+  } catch (e) {
+    alert('Could not remove that guide: ' + e.message);
+  }
+}
+
+// Import the pre-existing guides into the user's Drive library (one-time)
 async function importPastGuides() {
   const btn = document.getElementById('import-btn');
   const status = document.getElementById('import-status');
@@ -2749,10 +2766,16 @@ async function importPastGuides() {
     { file: 'guides/coffee_whisk.md',    name: 'coffee_whisk_2026-07-21.md' },
     { file: 'guides/wigs.md',            name: 'wigs_2026-05-26.md' }
   ];
-  const existing = (G.history || []).map(f => f.name);
+  // Refresh the library first so the duplicate check uses current data,
+  // not whatever happened to be loaded when the screen opened.
+  status.textContent = 'Checking your library…';
+  status.style.color = 'var(--text-faint)';
+  await loadHistory();
+  const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
   let done = 0, errs = [], skipped = 0;
   for (const s of seeds) {
-    if (existing.indexOf(s.name) !== -1) { skipped++; continue; }
+    if (existing.indexOf(s.name.toLowerCase()) !== -1) { skipped++; continue; }
+    existing.push(s.name.toLowerCase());
     status.textContent = `Importing ${prettyTopicFromName(s.name)}…`;
     status.style.color = 'var(--text-faint)';
     try {
