@@ -687,6 +687,7 @@
       <span id="auth-icon">○</span>
       <span id="auth-label">Sign in</span>
     </div>
+    <button class="hdr-btn" id="guides-btn" onclick="showGuides()" style="display:none;">📚 My Guides</button>
     <button class="hdr-btn" id="dash-btn" onclick="showDashboard()">📊 Cost Dashboard</button>
     <div id="hdr-key-status">No key loaded</div>
   </div>
@@ -873,6 +874,27 @@
     </div>
 
     <div class="error" id="refine-err"></div>
+  </div>
+
+  <!-- SCREEN: MY GUIDES -->
+  <div class="screen" id="scr-guides">
+    <div class="dash-header">
+      <div>
+        <p class="h2" style="margin-bottom:0.25rem">My Guides</p>
+        <p style="font-family:var(--ff-mono);font-size:0.87rem;color:var(--text-dim)">Saved to your Google Drive · Available on any device</p>
+      </div>
+      <button class="btn btn-ghost" onclick="loadMyGuides()">↺ Refresh</button>
+    </div>
+
+    <div id="guides-import-row" style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);">
+      <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.6rem;">
+        First time here? Import your earlier guides (Outdoor Cooking and Coffee Whisk) into your library so you can open and re-run them.
+      </p>
+      <button class="btn" onclick="importPastGuides()" id="import-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">⬇ Import my past guides</button>
+      <span id="import-status" style="font-family:var(--ff-mono);font-size:0.84rem;margin-left:0.75rem;color:var(--text-faint);"></span>
+    </div>
+
+    <div id="guides-list"></div>
   </div>
 
   <!-- SCREEN: DASHBOARD -->
@@ -1112,6 +1134,8 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + id).classList.add('active');
   document.getElementById('dash-btn').classList.toggle('active', id === 'dashboard');
+  const gb = document.getElementById('guides-btn');
+  if (gb) gb.classList.toggle('active', id === 'guides');
 }
 
 function goHome() {
@@ -2310,12 +2334,14 @@ function updateAuthUI(signedIn) {
     label.textContent = googleAuth.profile.name ? googleAuth.profile.name.split(' ')[0] : 'Signed in';
     box.title = 'Signed in as ' + googleAuth.profile.email + ' — click to sign out';
     if (nudge) nudge.style.display = 'none';
+    const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = '';
   } else {
     box.classList.remove('signed-in');
     icon.textContent = '○';
     label.textContent = 'Sign in';
     box.title = 'Sign in to save your guides across devices';
     if (nudge) nudge.style.display = 'block';
+    const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = 'none';
   }
 }
 
@@ -2400,6 +2426,135 @@ function renderHistoryButton() {
       label.textContent = (googleAuth.profile.name ? googleAuth.profile.name.split(' ')[0] : 'Me') + ' · ' + G.history.length + ' guides';
     }
   }
+}
+
+// ── MY GUIDES LIBRARY ──
+function prettyTopicFromName(name) {
+  return name.replace(/\.md$/i, '').replace(/_\d{4}-\d{2}-\d{2}$/, '').replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+async function showGuides() {
+  if (!googleAuth.profile) { handleAuthClick(); return; }
+  showScreen('guides');
+  loadMyGuides();
+}
+
+async function loadMyGuides() {
+  const listEl = document.getElementById('guides-list');
+  listEl.innerHTML = '<p style="color:var(--text-faint);font-family:var(--ff-mono);font-size:0.9rem;">Loading your guides…</p>';
+  const files = await loadHistory();
+  if (!files || files.length === 0) {
+    listEl.innerHTML = '<p style="color:var(--text-faint);font-family:var(--ff-mono);font-size:0.9rem;">No guides yet. Import your past guides above, or run a new one.</p>';
+    return;
+  }
+  listEl.innerHTML = files.map(f => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;padding:1rem;margin-bottom:0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);">
+      <div style="min-width:0;">
+        <div style="font-family:var(--ff-display);font-size:1.02rem;color:var(--text-bright);font-weight:600;">${esc(prettyTopicFromName(f.name))}</div>
+        <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);margin-top:0.2rem;">Updated ${new Date(f.modifiedTime).toLocaleDateString()} · ${esc(f.name)}</div>
+      </div>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="openGuide('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">Open</button>
+        <button class="btn btn-refine" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="rerunGuide('${f.id}','${esc(f.name).replace(/'/g,"\\'")}')">🔧 Re-run with edits</button>
+      </div>
+    </div>`).join('');
+}
+
+// Download a file's content from the user's Drive (app-created files, drive.file scope)
+async function driveDownloadFile(fileId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: 'Bearer ' + googleAuth.token }
+  });
+  if (!res.ok) throw new Error('download failed');
+  return await res.text();
+}
+
+// Parse embedded TOP RECOMMENDATIONS section back into G.topPicks
+function extractTopPicksFromMd(md) {
+  const picks = [];
+  const m = md.match(/##\s*TOP RECOMMENDATIONS\s*([\s\S]*?)(?:\n##\s|\n#\s|$)/i);
+  if (m) {
+    const lines = m[1].split('\n');
+    let cur = null;
+    for (const raw of lines) {
+      const head = raw.match(/^\s*\d+\.\s*\*\*(.+?)\*\*\s*—\s*(.+)$/);
+      if (head) { if (cur) picks.push(cur); cur = { name: head[1].trim(), reason: head[2].trim(), url: '' }; }
+      else if (cur && /^\s*https?:\/\//.test(raw)) { cur.url = raw.trim(); }
+    }
+    if (cur) picks.push(cur);
+  }
+  return picks;
+}
+
+async function openGuide(fileId, name) {
+  try {
+    const content = await driveDownloadFile(fileId);
+    G.masterSource = content;
+    G.topic = prettyTopicFromName(name);
+    G.topPicks = extractTopPicksFromMd(content);
+    G.searchCount = G.searchCount || 0;
+    showComplete();
+  } catch (e) {
+    alert('Could not open that guide. Please try again.');
+  }
+}
+
+async function rerunGuide(fileId, name) {
+  try {
+    const content = await driveDownloadFile(fileId);
+    G.masterSource = content;
+    G.topic = prettyTopicFromName(name);
+    G.topPicks = extractTopPicksFromMd(content);
+    G.priorAnswers = [];
+    showRefine();
+  } catch (e) {
+    alert('Could not load that guide for re-run. Please try again.');
+  }
+}
+
+// Import the two pre-existing guides into the user's Drive library (one-time)
+async function importPastGuides() {
+  if (!googleAuth.token) { handleAuthClick(); return; }
+  const btn = document.getElementById('import-btn');
+  const status = document.getElementById('import-status');
+  btn.disabled = true;
+  const seeds = [
+    { file: 'guides/outdoor_cooking.md', name: 'outdoor_cooking_2026-05-25.md' },
+    { file: 'guides/coffee_whisk.md',    name: 'coffee_whisk_2026-07-21.md' }
+  ];
+  let done = 0;
+  for (const s of seeds) {
+    status.textContent = `Importing ${prettyTopicFromName(s.name)}…`;
+    try {
+      const r = await fetch(s.file);
+      const md = await r.text();
+      await saveNamedGuideToDrive(s.name, md);
+      done++;
+    } catch (e) { console.warn('import failed', s.name, e); }
+  }
+  status.textContent = `✓ Imported ${done} guide${done===1?'':'s'}.`;
+  status.style.color = '#6ca';
+  btn.disabled = false;
+  loadMyGuides();
+}
+
+// Save a guide with a specific filename into the Drive Reports folder
+async function saveNamedGuideToDrive(name, content) {
+  await ensureReportsFolder();
+  const meta = { name, parents: googleAuth.folderId ? [googleAuth.folderId] : undefined };
+  const boundary = 'cf_b_' + Date.now();
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(meta) +
+    `\r\n--${boundary}\r\nContent-Type: text/markdown\r\n\r\n` +
+    content + `\r\n--${boundary}--`;
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body
+  });
+  return res.ok;
 }
 
 initGoogleAuth();
