@@ -533,7 +533,7 @@
       margin-bottom: 2rem;
     }
 
-    .dash-total-cell {
+    .dash-total-cell { flex-direction: column;
       background: var(--surface);
       padding: 1rem 1.25rem;
       text-align: center;
@@ -909,12 +909,19 @@
 
     <div class="dash-totals">
       <div class="dash-total-cell">
-        <span class="v" id="dash-total-cost">—</span>
-        <span class="l">Total Spent</span>
+        <span class="v" id="dash-my-cost">—</span>
+        <span class="l">My Costs</span>
+        <span class="sub" id="dash-my-runs" style="font-family:var(--ff-mono);font-size:0.76rem;color:var(--text-faint);margin-top:0.2rem;">—</span>
       </div>
       <div class="dash-total-cell">
-        <span class="v" id="dash-total-runs">—</span>
-        <span class="l">Guides Run</span>
+        <span class="v" id="dash-other-cost">—</span>
+        <span class="l">Other Users</span>
+        <span class="sub" id="dash-other-runs" style="font-family:var(--ff-mono);font-size:0.76rem;color:var(--text-faint);margin-top:0.2rem;">—</span>
+      </div>
+      <div class="dash-total-cell">
+        <span class="v" id="dash-total-cost">—</span>
+        <span class="l">Combined Total</span>
+        <span class="sub" id="dash-total-runs" style="font-family:var(--ff-mono);font-size:0.76rem;color:var(--text-faint);margin-top:0.2rem;">—</span>
       </div>
       <div class="dash-total-cell">
         <span class="v" id="dash-avg-cost">—</span>
@@ -1728,20 +1735,30 @@ async function loadDashboard() {
 
     if (runs.length === 0) {
       tbody.innerHTML = '<tr><td colspan="6" class="dash-empty">No guide runs logged yet. Run your first research topic to see data here.</td></tr>';
-      document.getElementById('dash-total-cost').textContent = '$0.00';
-      document.getElementById('dash-total-runs').textContent = '0';
-      document.getElementById('dash-avg-cost').textContent   = '$0.00';
+      document.getElementById('dash-my-cost').textContent    = '$0.00';
+      document.getElementById('dash-my-runs').textContent    = '0 runs';
+      document.getElementById('dash-other-cost').textContent = '$' + otherCost.toFixed(4);
+      document.getElementById('dash-other-runs').textContent = otherRuns + (otherRuns === 1 ? ' run' : ' runs');
+      document.getElementById('dash-total-cost').textContent = '$' + otherCost.toFixed(4);
+      document.getElementById('dash-total-runs').textContent = otherRuns + (otherRuns === 1 ? ' run' : ' runs');
+      document.getElementById('dash-avg-cost').textContent   = '$' + (otherRuns ? (otherCost/otherRuns).toFixed(4) : '0.00');
       return;
     }
 
     const myCost    = runs.reduce((s, r) => s + (r.cost || 0), 0);
+    const myRuns    = runs.length;
     const totalCost = myCost + otherCost;
-    const totalRuns = runs.length + otherRuns;
+    const totalRuns = myRuns + otherRuns;
     const avgCost   = totalRuns ? totalCost / totalRuns : 0;
+    const runLbl    = n => n + ' run' + (n === 1 ? '' : 's');
 
-    document.getElementById('dash-total-cost').textContent = '$' + totalCost.toFixed(4);
-    document.getElementById('dash-total-runs').textContent = totalRuns;
-    document.getElementById('dash-avg-cost').textContent   = '$' + avgCost.toFixed(4);
+    document.getElementById('dash-my-cost').textContent     = '$' + myCost.toFixed(4);
+    document.getElementById('dash-my-runs').textContent     = runLbl(myRuns);
+    document.getElementById('dash-other-cost').textContent  = '$' + otherCost.toFixed(4);
+    document.getElementById('dash-other-runs').textContent  = runLbl(otherRuns);
+    document.getElementById('dash-total-cost').textContent  = '$' + totalCost.toFixed(4);
+    document.getElementById('dash-total-runs').textContent  = runLbl(totalRuns);
+    document.getElementById('dash-avg-cost').textContent    = '$' + avgCost.toFixed(4);
 
     tbody.innerHTML = runs.map(r => {
       const d = new Date(r.date);
