@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The Clarity Factory</title>
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+  <link rel="icon" type="image/x-icon" href="favicon.ico?v=8">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=8">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v=8">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0e100d">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -666,7 +666,7 @@
   <div class="brand">
     <span class="brand-name" onclick="goHome()">The Clarity Factory</span>
     <span class="brand-tag">Comprehensive · Current · On Demand</span>
-    <span id="app-version">v7 · Updated Aug 3, 2026 · 8:45 PM</span>
+    <span id="app-version">v8</span>
   </div>
   <div class="hdr-right">
     <div id="auth-status" onclick="handleAuthClick()" title="Sign in to save your guides across devices">
@@ -2172,6 +2172,23 @@ function slug(str) { return str.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace
 })();
 
 function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); return d.toISOString().slice(0,10); }
+
+// ═══════════════════════════════════════════
+// VERSION / LAST-UPDATED STAMP (rendered in viewer's local timezone)
+// ═══════════════════════════════════════════
+const BUILD_VERSION = 'v8';
+const BUILD_TIME = new Date('2026-08-03T20:50:00Z'); // set at each push
+(function renderVersion() {
+  try {
+    const s = BUILD_TIME.toLocaleString(undefined, {
+      month: 'short', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    });
+    document.getElementById('app-version').textContent = BUILD_VERSION + ' · Updated ' + s;
+  } catch (e) {
+    document.getElementById('app-version').textContent = BUILD_VERSION;
+  }
+})();
 
 // ═══════════════════════════════════════════
 // GOOGLE SIGN-IN + DRIVE SAVE + HISTORY (Model 1)
