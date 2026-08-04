@@ -906,7 +906,7 @@
 
     <div id="guides-import-row" style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);">
       <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.6rem;">
-        First time here? Import your earlier guides (Outdoor Cooking and Coffee Whisk) into your library so you can open and re-run them.
+        First time here? Import your earlier guides (Outdoor Cooking, Coffee Whisk, and Wigs) into your library so you can open and re-run them.
       </p>
       <button class="btn" onclick="importPastGuides()" id="import-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">⬇ Import my past guides</button>
       <span id="import-status" style="font-family:var(--ff-mono);font-size:0.84rem;margin-left:0.75rem;color:var(--text-faint);"></span>
@@ -2710,10 +2710,13 @@ async function importPastGuides() {
   btn.disabled = true;
   const seeds = [
     { file: 'guides/outdoor_cooking.md', name: 'outdoor_cooking_2026-05-25.md' },
-    { file: 'guides/coffee_whisk.md',    name: 'coffee_whisk_2026-07-21.md' }
+    { file: 'guides/coffee_whisk.md',    name: 'coffee_whisk_2026-07-21.md' },
+    { file: 'guides/wigs.md',            name: 'wigs_2026-05-26.md' }
   ];
-  let done = 0, errs = [];
+  const existing = (G.history || []).map(f => f.name);
+  let done = 0, errs = [], skipped = 0;
   for (const s of seeds) {
+    if (existing.indexOf(s.name) !== -1) { skipped++; continue; }
     status.textContent = `Importing ${prettyTopicFromName(s.name)}…`;
     status.style.color = 'var(--text-faint)';
     try {
@@ -2729,10 +2732,12 @@ async function importPastGuides() {
     }
   }
   if (errs.length) {
-    status.textContent = `Imported ${done}. Failed: ${errs.join(' | ')}`;
+    status.textContent = `Imported ${done}${skipped?' (skipped '+skipped+' already there)':''}. Failed: ${errs.join(' | ')}`;
     status.style.color = 'var(--ember)';
   } else {
-    status.textContent = `✓ Imported ${done} guide${done===1?'':'s'}.`;
+    status.textContent = skipped && !done
+      ? `✓ All guides already imported.`
+      : `✓ Imported ${done} guide${done===1?'':'s'}${skipped?' (skipped '+skipped+' already there)':''}.`;
     status.style.color = '#6ca';
   }
   btn.disabled = false;
