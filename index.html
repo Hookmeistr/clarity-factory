@@ -2300,18 +2300,31 @@ function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); re
 // ═══════════════════════════════════════════
 // VERSION / LAST-UPDATED STAMP (rendered in viewer's local timezone)
 // ═══════════════════════════════════════════
-const BUILD_VERSION = 'v9';
-const BUILD_TIME = new Date('2026-08-04T09:12:00Z'); // real push time (renders in viewer local zone)
-(function renderVersion() {
+const BUILD_VERSION = 'v10';
+// Last-updated stamp is read live from the GitHub commit history so it can never go stale.
+const BUILD_TIME_FALLBACK = new Date('2026-08-04T09:12:00Z');
+
+function paintVersion(d) {
   try {
-    const s = BUILD_TIME.toLocaleString(undefined, {
+    const s = d.toLocaleString(undefined, {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
     });
-    document.getElementById('app-version').textContent = BUILD_VERSION + ' · Updated ' + s;
+    document.getElementById('app-version').textContent = BUILD_VERSION + ' \u00b7 Updated ' + s;
   } catch (e) {
     document.getElementById('app-version').textContent = BUILD_VERSION;
   }
+}
+
+(function renderVersion() {
+  paintVersion(BUILD_TIME_FALLBACK);
+  fetch('https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=1', { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      const iso = j && j[0] && j[0].commit && (j[0].commit.committer || j[0].commit.author).date;
+      if (iso) paintVersion(new Date(iso));
+    })
+    .catch(() => {});
 })();
 
 // ═══════════════════════════════════════════
