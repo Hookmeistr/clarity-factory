@@ -2302,10 +2302,12 @@ function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); re
 // ═══════════════════════════════════════════
 // Version is derived from the repo's ACTUAL revision history.
 //   MAJOR.MINOR = milestone, set deliberately below
-//   PATCH       = real commit count in the repo (auto, never hand-maintained)
+//   PATCH       = real commit count (read from GitHub's Link header in ONE request, then cached)
 const VERSION_MAJOR_MINOR = '2.0';
-const BUILD_VERSION = 'v' + VERSION_MAJOR_MINOR;   // fallback until commits load
-const BUILD_TIME_FALLBACK = new Date('2026-08-04T17:46:00Z');
+const BUILD_VERSION = 'v' + VERSION_MAJOR_MINOR;
+const BUILD_TIME_FALLBACK = new Date('2026-08-04T17:50:00Z');
+const VER_CACHE_KEY = 'cf_version_cache';
+const VER_CACHE_MS  = 10 * 60 * 1000; // re-check at most every 10 minutes
 
 function paintVersion(version, d) {
   const el = document.getElementById('app-version');
@@ -2322,33 +2324,42 @@ function paintVersion(version, d) {
   el.textContent = out;
 }
 
-async function countCommits() {
-  let total = 0;
-  for (let page = 1; page <= 5; page++) {
-    const r = await fetch(
-      'https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=100&page=' + page,
-      { cache: 'no-store' });
-    if (!r.ok) throw new Error('commits unavailable');
-    const arr = await r.json();
-    if (!Array.isArray(arr)) throw new Error('unexpected response');
-    total += arr.length;
-    if (arr.length < 100) break;
-  }
-  return total;
-}
-
 (function renderVersion() {
-  paintVersion(BUILD_VERSION, BUILD_TIME_FALLBACK);
-  (async () => {
-    try {
-      const latest = await fetch(
-        'https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=1',
-        { cache: 'no-store' }).then(r => r.ok ? r.json() : null);
-      const iso = latest && latest[0] && (latest[0].commit.committer || latest[0].commit.author).date;
-      const count = await countCommits();
-      paintVersion('v' + VERSION_MAJOR_MINOR + '.' + count, iso ? new Date(iso) : BUILD_TIME_FALLBACK);
-    } catch (e) { /* keep fallback */ }
-  })();
+  // 1) Paint immediately from cache if we have one (no network, no rate-limit cost)
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(VER_CACHE_KEY) || 'null'); } catch (e) {}
+  if (cached && cached.count) {
+    paintVersion('v' + VERSION_MAJOR_MINOR + '.' + cached.count,
+                 cached.iso ? new Date(cached.iso) : BUILD_TIME_FALLBACK);
+    if (Date.now() - (cached.at || 0) < VER_CACHE_MS) return; // fresh enough — skip the network entirely
+  } else {
+    paintVersion(BUILD_VERSION, BUILD_TIME_FALLBACK);
+  }
+
+  // 2) Single request: body gives latest commit date, Link header gives total commit count
+  fetch('https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=1', { cache: 'no-store' })
+    .then(async r => {
+      if (!r.ok) return;                       // rate-limited or offline -> keep what's painted
+      const link = r.headers.get('link') || '';
+      let count = null;
+      const lastPart = link.split(',').find(x => x.indexOf('rel="last"') !== -1);
+      if (lastPart) {
+        const pg = lastPart.split('page=').pop().split('>')[0];
+        const n = parseInt(pg, 10);
+        if (!isNaN(n)) count = n;
+      }
+      const arr = await r.json();
+      const iso = Array.isArray(arr) && arr[0]
+        ? (arr[0].commit.committer || arr[0].commit.author).date : null;
+      if (!count && cached && cached.count) count = cached.count;
+      if (count) {
+        paintVersion('v' + VERSION_MAJOR_MINOR + '.' + count, iso ? new Date(iso) : BUILD_TIME_FALLBACK);
+        try { localStorage.setItem(VER_CACHE_KEY, JSON.stringify({ count, iso, at: Date.now() })); } catch (e) {}
+      } else if (iso) {
+        paintVersion(BUILD_VERSION, new Date(iso));
+      }
+    })
+    .catch(() => {});
 })();
 
 // ═══════════════════════════════════════════
