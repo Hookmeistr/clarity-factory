@@ -181,6 +181,13 @@
       max-width: 780px;
       padding: 3rem 2rem 6rem;
       flex: 1;
+      /* Working area scaled up 25% for readability. Header stays at its own size.
+         max-width is divided by the same factor so the column keeps its true width. */
+      zoom: 1.25;
+      max-width: 624px;
+    }
+    @supports not (zoom: 1) {
+      main { zoom: normal; font-size: 1.25rem; max-width: 780px; }
     }
 
     .screen { display: none; animation: fadeIn 0.22s ease; }
