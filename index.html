@@ -922,6 +922,36 @@
     <div class="error" id="refine-err"></div>
   </div>
 
+  <!-- SCREEN: SHARPEN REVIEW -->
+  <div class="screen" id="scr-sharpen">
+    <p class="h1" id="sharpen-title">Here's what I understood</p>
+    <p class="subtitle" style="margin-bottom:1.5rem;">
+      Your request was expanded into a more precise research brief. Anything I inferred is listed below —
+      review it, edit it, or run your original wording instead.
+    </p>
+
+    <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:1rem;margin-bottom:1.25rem;">
+      <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.5rem;">What you wrote</div>
+      <div id="sharpen-original" style="font-size:0.9rem;color:var(--text-dim);line-height:1.6;white-space:pre-wrap;"></div>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--ember);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.5rem;">Research brief (editable)</div>
+      <textarea id="sharpen-text" rows="16" style="width:100%;font-size:0.92rem;padding:0.8rem;background:var(--surface3);border:1px solid var(--ember-lo);border-radius:3px;color:var(--text-bright);font-family:var(--ff-body);resize:vertical;line-height:1.6;box-sizing:border-box;"></textarea>
+    </div>
+
+    <div id="sharpen-additions-wrap" style="display:none;background:var(--surface2);border-left:3px solid var(--ember-lo);border-radius:var(--r);padding:0.85rem 1rem;margin-bottom:1.25rem;">
+      <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">Inferred — not stated by you</div>
+      <div id="sharpen-additions" style="font-size:0.88rem;color:var(--text-dim);line-height:1.6;"></div>
+    </div>
+
+    <div style="display:flex;gap:0.7rem;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="acceptSharpened()">Use this brief &#8594;</button>
+      <button class="btn btn-ghost" onclick="useOriginalRequest()">Use my original wording</button>
+    </div>
+    <div class="err" id="sharpen-err" style="display:none;margin-top:0.9rem;"></div>
+  </div>
+
   <!-- SCREEN: MY GUIDES -->
   <div class="screen" id="scr-guides">
     <div class="dash-header">
@@ -1310,16 +1340,32 @@ async function doAnswers() {
     return;
   }
 
+  G.priorAnswers = parts.slice(); // save for refine context
+
+  const extraCtx = document.getElementById('q-extra-context')?.value.trim();
+
+  // Sharpen the buyer's own words (the free-text context) before researching.
+  // Multiple-choice answers are already precise and pass through untouched.
+  if (extraCtx) {
+    await sharpenRequest(
+      extraCtx,
+      `The buyer is researching: ${G.topic}. Their structured answers are:\n${parts.join('\n')}`,
+      (finalCtx) => startResearchPass(parts, finalCtx)
+    );
+    return;
+  }
+  startResearchPass(parts, '');
+}
+
+async function startResearchPass(parts, extraCtx) {
   document.getElementById('q-box').style.display = 'none';
   clearStream();
   setPill('research', 'Stage 1–3 — Full Research');
   setProgress(15, 'Running full research pass…');
+  showScreen('research');
   document.getElementById('run-context-btn-wrap').style.display = 'block';
   document.getElementById('run-context-wrap').style.display = 'none';
 
-  G.priorAnswers = parts.slice(); // save for refine context
-
-  const extraCtx = document.getElementById('q-extra-context')?.value.trim();
   const extraCtxStr = extraCtx ? `\n\nAdditional context from buyer: ${extraCtx}` : '';
 
   G.conversation.push({
@@ -2129,7 +2175,16 @@ async function runRefine() {
     return;
   }
 
-  // Hide input, show progress
+  // Sharpen the refinement request first, with the user's approval
+  await sharpenRequest(
+    req,
+    `The buyer is refining an existing guide on: ${G.topic}.`,
+    (finalReq) => startRefinePass(finalReq)
+  );
+}
+
+async function startRefinePass(req) {
+  showScreen('refine');
   document.getElementById('refine-input-box').style.display = 'none';
   document.getElementById('refine-progress-wrap').style.display = 'block';
   hideErr('refine-err');
@@ -2422,6 +2477,118 @@ function paintVersion(version, d) {
     })
     .catch(() => {});
 })();
+
+
+// ═══════════════════════════════════════════
+// REQUEST SHARPENING — turn a plain request into a rigorous research brief.
+// Shown to the user for approval before any research runs (never silent).
+// ═══════════════════════════════════════════
+const SHARPEN_MODEL  = MODEL;
+const SHARPEN_EFFORT = 'medium';   // short text task, no searches — medium is plenty
+
+const SHARPEN_SYS = `You rewrite a buyer's research request into a precise research brief.
+
+Your job is to SHARPEN, never to invent.
+
+DO:
+- Make implicit requirements explicit.
+- Where the user describes real-world use, spell out the physical/technical demands it implies.
+- Force the research to address things manufacturers do NOT publish, by naming the
+  measurable proxies that should be reasoned from instead.
+- Convert vague wording into testable requirements.
+- Mark hard requirements (must-have) separately from preferences (nice-to-have).
+- Instruct the research to say so plainly if a requirement eliminates all candidates,
+  rather than quietly relaxing it.
+- Preserve every constraint the user gave, exactly.
+
+DO NOT:
+- Add requirements, budgets, brands, or preferences the user did not state or clearly imply.
+- Narrow the scope beyond what they asked.
+- Change their intent.
+
+Return ONLY valid JSON, no markdown fences, no preamble:
+{
+  "brief": "the sharpened research brief as plain text",
+  "additions": ["short plain-language note of each thing you inferred rather than were told"]
+}
+If the request is already precise and nothing needs sharpening, return the original
+wording as "brief" and an empty "additions" array.`;
+
+let sharpenPending = null;   // { original, onAccept(text) }
+
+async function sharpenRequest(rawText, contextNote, onAccept) {
+  // Nothing to sharpen
+  if (!rawText || rawText.trim().length < 12) { onAccept(rawText); return; }
+
+  sharpenPending = { original: rawText, onAccept };
+  document.getElementById('sharpen-original').textContent = rawText;
+  document.getElementById('sharpen-text').value = 'Working on it…';
+  document.getElementById('sharpen-additions-wrap').style.display = 'none';
+  hideErr('sharpen-err');
+  showScreen('sharpen');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': G.key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: SHARPEN_MODEL,
+        max_tokens: 4000,
+        output_config: { effort: SHARPEN_EFFORT },
+        system: SHARPEN_SYS,
+        messages: [{ role: 'user', content: (contextNote ? contextNote + '\n\n' : '') + 'Request:\n' + rawText }]
+      })
+    });
+    if (!resp.ok) throw new Error('status ' + resp.status);
+    const data = await resp.json();
+
+    // track cost of this small call
+    if (data.usage) {
+      G.tokens.in  += data.usage.input_tokens  || 0;
+      G.tokens.out += data.usage.output_tokens || 0;
+      G.tokens.calls += 1;
+      updateTracker();
+    }
+
+    const txt = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+    const clean = txt.replace(/```json|```/g, '').trim();
+    let parsed = null;
+    try { parsed = JSON.parse(clean); } catch (e) {
+      const m = clean.match(/\{[\s\S]*\}/);
+      if (m) { try { parsed = JSON.parse(m[0]); } catch (e2) {} }
+    }
+    if (!parsed || !parsed.brief) throw new Error('could not read the rewritten brief');
+
+    document.getElementById('sharpen-text').value = parsed.brief;
+    const adds = Array.isArray(parsed.additions) ? parsed.additions.filter(Boolean) : [];
+    if (adds.length) {
+      document.getElementById('sharpen-additions').innerHTML =
+        adds.map(a => '&bull; ' + esc(a)).join('<br>');
+      document.getElementById('sharpen-additions-wrap').style.display = 'block';
+    }
+  } catch (e) {
+    // If sharpening fails, fall back to the user's own words rather than blocking the run
+    document.getElementById('sharpen-text').value = rawText;
+    showErr('sharpen-err', 'Could not rewrite the request (' + e.message + '). Your original wording is shown above and will be used.');
+  }
+}
+
+function acceptSharpened() {
+  const text = document.getElementById('sharpen-text').value.trim();
+  if (!text) { showErr('sharpen-err', 'The brief cannot be empty.'); return; }
+  const p = sharpenPending; sharpenPending = null;
+  if (p && p.onAccept) p.onAccept(text);
+}
+
+function useOriginalRequest() {
+  const p = sharpenPending; sharpenPending = null;
+  if (p && p.onAccept) p.onAccept(p.original);
+}
 
 // ═══════════════════════════════════════════
 // GOOGLE SIGN-IN + DRIVE SAVE + HISTORY (Model 1)
