@@ -2556,14 +2556,16 @@ async function saveGuideToDrive() {
 async function loadHistory() {
   try { await ensureToken(); } catch(e) { return []; }
   await ensureReportsFolder();
-  if (!googleAuth.folderId) return [];
   try {
-    const q = encodeURIComponent(`'${googleAuth.folderId}' in parents and trashed=false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`, {
+    // With the drive.file scope Drive only ever returns files this app created,
+    // so we can list them directly rather than depending on the folder lookup.
+    const q = encodeURIComponent("trashed=false and mimeType != 'application/vnd.google-apps.folder'");
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=100`, {
       headers: { Authorization: 'Bearer ' + googleAuth.token }
     });
+    if (!res.ok) { console.warn('history http', res.status); return []; }
     const data = await res.json();
-    G.history = data.files || [];
+    G.history = (data.files || []).filter(f => /\.md$/i.test(f.name));
     renderHistoryButton();
     return G.history;
   } catch (e) { console.warn('history error', e); return []; }
@@ -2675,20 +2677,31 @@ async function importPastGuides() {
     { file: 'guides/outdoor_cooking.md', name: 'outdoor_cooking_2026-05-25.md' },
     { file: 'guides/coffee_whisk.md',    name: 'coffee_whisk_2026-07-21.md' }
   ];
-  let done = 0;
+  let done = 0, errs = [];
   for (const s of seeds) {
     status.textContent = `Importing ${prettyTopicFromName(s.name)}…`;
+    status.style.color = 'var(--text-faint)';
     try {
-      const r = await fetch(s.file);
+      const r = await fetch(s.file, { cache: 'no-store' });
+      if (!r.ok) throw new Error('could not read seed file (' + r.status + ')');
       const md = await r.text();
+      if (!md || md.length < 100) throw new Error('seed file was empty');
       await saveNamedGuideToDrive(s.name, md);
       done++;
-    } catch (e) { console.warn('import failed', s.name, e); }
+    } catch (e) {
+      console.warn('import failed', s.name, e);
+      errs.push(prettyTopicFromName(s.name) + ': ' + e.message);
+    }
   }
-  status.textContent = `✓ Imported ${done} guide${done===1?'':'s'}.`;
-  status.style.color = '#6ca';
+  if (errs.length) {
+    status.textContent = `Imported ${done}. Failed: ${errs.join(' | ')}`;
+    status.style.color = 'var(--ember)';
+  } else {
+    status.textContent = `✓ Imported ${done} guide${done===1?'':'s'}.`;
+    status.style.color = '#6ca';
+  }
   btn.disabled = false;
-  loadMyGuides();
+  await loadMyGuides();
 }
 
 // Save a guide with a specific filename into the Drive Reports folder
@@ -2706,7 +2719,12 @@ async function saveNamedGuideToDrive(name, content) {
     headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'multipart/related; boundary=' + boundary },
     body
   });
-  return res.ok;
+  if (!res.ok) {
+    let detail = '';
+    try { const j = await res.json(); detail = (j.error && j.error.message) || ''; } catch (e) {}
+    throw new Error('Drive save failed (' + res.status + ') ' + detail);
+  }
+  return true;
 }
 
 initGoogleAuth();
