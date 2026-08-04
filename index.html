@@ -716,6 +716,21 @@
 
     <div class="stream-box" id="stream-box"></div>
 
+    <div id="run-context-btn-wrap" style="display:none;margin-top:0.85rem;">
+      <button class="btn btn-ghost" onclick="toggleRunContext()" id="run-context-toggle-btn"
+              style="font-size:0.86rem;padding:0.4rem 0.9rem;margin-top:0;">➕ Add Context to This Run</button>
+    </div>
+    <div id="run-context-wrap" style="display:none;margin-top:0.5rem;padding:0.9rem;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);">
+      <div style="font-family:var(--ff-mono);font-size:0.81rem;color:var(--text-faint);margin-bottom:0.5rem;text-transform:uppercase;letter-spacing:0.1em;">Add context to this research run</div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-start;">
+        <input type="text" id="run-context-input" placeholder="e.g. I forgot — I also need options that work outdoors in direct sunlight"
+               style="flex:1;font-size:0.92rem;padding:0.55rem 0.8rem;"
+               onkeydown="if(event.key==='Enter')addRunContext()">
+        <button onclick="addRunContext()" class="btn" style="margin-top:0;padding:0.55rem 1rem;font-size:0.88rem;white-space:nowrap;">Add →</button>
+      </div>
+      <p id="run-context-confirm" style="display:none;font-family:var(--ff-mono);font-size:0.82rem;color:var(--green);margin-top:0.4rem;">✓ Will be included at the next research step.</p>
+    </div>
+
     <div id="q-loading" style="display:none;margin-top:1.5rem;padding:1.2rem 1.4rem;background:var(--surface2);border:1px solid var(--border2);border-radius:6px;font-family:var(--ff-mono);font-size:0.93rem;color:var(--text-dim);text-align:center;">
       ⏳ &nbsp;Preparing your questions — please wait, this takes a moment…
     </div>
@@ -725,6 +740,15 @@
       <div id="q-items"></div>
       <div id="q-hint" style="display:none;color:var(--ember);font-size:0.93rem;margin-top:0.9rem;padding:0.6rem 0.9rem;background:var(--ember-glow);border-radius:3px;">
         &#9888; Please answer all questions above before continuing.
+      </div>
+      <div style="margin-top:1.5rem;border-top:1px solid var(--border2);padding-top:1.2rem;">
+        <label style="font-family:var(--ff-mono);font-size:0.82rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.45rem;display:block;">
+          Additional Context <span style="font-weight:normal;color:var(--text-faint);text-transform:none;letter-spacing:0;">(optional)</span>
+        </label>
+        <textarea id="q-extra-context" rows="3"
+          placeholder="Anything important the questions didn't ask about? e.g. &quot;I primarily use heavy cream, not the dairy options listed&quot; or &quot;This needs to work with a specific existing setup&quot;"
+          style="width:100%;font-size:0.94rem;padding:0.7rem;background:var(--surface3);border:1px solid var(--border2);border-radius:3px;color:var(--text-bright);font-family:var(--ff-body);resize:vertical;outline:none;line-height:1.55;box-sizing:border-box;"></textarea>
+        <p style="font-size:0.82rem;color:var(--text-faint);margin-top:0.3rem;line-height:1.4;">This gets passed directly to the research — use it for anything the questions missed.</p>
       </div>
       <button class="btn btn-primary" onclick="doAnswers()" style="margin-top:1.2rem;width:100%;font-size:1rem;padding:0.85rem">Submit Answers &amp; Run Full Research &#8594;</button>
     </div>
@@ -752,6 +776,8 @@
         <strong style="color:var(--text-dim)">Quarterly updates:</strong> Re-upload the .md to Claude and run UPDATE_RUNNER_PROMPT. Next update due in 3 months.
       </p>
     </div>
+
+    <div id="top-picks-section" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.4rem;margin-top:1.5rem;"></div>
 
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:2rem;">
       <button class="btn btn-refine" onclick="showRefine()">🔧 Refine Results</button>
@@ -862,13 +888,15 @@ let G = {
   topic: null,
   conversation: [],
   masterSource: null,
+  topPicks: [],          // ← ranked picks extracted from research output
   questions: [],
   priorAnswers: [],      // ← stores Q&A summary for refine context
   searchCount: 0,
   callCount: 0,          // ← tracks consecutive API calls for pacing
   tokens: { in: 0, out: 0, calls: 0 },
   streaming: false,
-  prevScreen: 'topic'
+  prevScreen: 'topic',
+  pendingContext: null   // ← context injected mid-run by user
 };
 
 const MODEL     = 'claude-sonnet-4-6';
@@ -989,6 +1017,18 @@ HORIZONTAL: Run scan queries to find new entrants, discontinued products, new ca
 
 RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anything unverified
 
+After the MASTER_SOURCE markers, output your top 5 recommendations in this exact format:
+
+TOP_PICKS_START
+1. [Product/Brand Name] | [One-line reason it tops the list] | [Best URL — brand product page, Amazon, or top retailer found during research]
+2. [Product/Brand Name] | [One-line reason] | [URL]
+3. [Product/Brand Name] | [One-line reason] | [URL]
+4. [Product/Brand Name] | [One-line reason] | [URL]
+5. [Product/Brand Name] | [One-line reason] | [URL]
+TOP_PICKS_END
+
+URL rules: Use actual URLs confirmed during your research. Never fabricate a URL. If no specific page was confirmed for a product, use https://www.google.com/search?q=[URL-encoded+product+name].
+
 ━━━ [PHASE:REFINE] ━━━
 The user has an existing MASTER_SOURCE and wants to add or change specific variables without redoing the full research.
 
@@ -1079,11 +1119,17 @@ async function doAnswers() {
       const checked = [...document.querySelectorAll(`input[name="${groupName}"]:checked`)].map(el => el.value);
       if (checked.length === 0) {
         allAnswered = false;
-        // Highlight the q-item
         const items = document.querySelectorAll('.q-option');
         items.forEach(el => { if (el.querySelector(`input[name="${groupName}"]`)) el.style.borderColor = 'var(--ember)'; });
       } else {
-        parts.push(`${q.label}\nAnswer: ${checked.join(', ')}`);
+        const resolved = checked.map(v => {
+          if (v === '__other__') {
+            const tf = document.getElementById(`q-other-text-${qi}`);
+            return tf && tf.value.trim() ? tf.value.trim() : 'Other (unspecified)';
+          }
+          return v;
+        });
+        parts.push(`${q.label}\nAnswer: ${resolved.join(', ')}`);
       }
     } else {
       const el = document.getElementById(q.inputId);
@@ -1109,12 +1155,17 @@ async function doAnswers() {
   clearStream();
   setPill('research', 'Stage 1–3 — Full Research');
   setProgress(15, 'Running full research pass…');
+  document.getElementById('run-context-btn-wrap').style.display = 'block';
+  document.getElementById('run-context-wrap').style.display = 'none';
 
   G.priorAnswers = parts.slice(); // save for refine context
 
+  const extraCtx = document.getElementById('q-extra-context')?.value.trim();
+  const extraCtxStr = extraCtx ? `\n\nAdditional context from buyer: ${extraCtx}` : '';
+
   G.conversation.push({
     role: 'user',
-    content: `[PHASE:RESEARCH]\n\nAnswers:\n${parts.join('\n\n')}\n\nRun the complete research pass and generate the MASTER_SOURCE file.`
+    content: `[PHASE:RESEARCH]\n\nAnswers:\n${parts.join('\n\n')}${extraCtxStr}\n\nRun the complete research pass and generate the MASTER_SOURCE file.`
   });
 
   await runStream('research');
@@ -1261,6 +1312,12 @@ async function runStream(phase, attempt = 0) {
         await sleep(pauseMs);
       }
 
+      // Inject any context the user added mid-run
+      if (G.pendingContext) {
+        G.conversation.push({ role: 'user', content: G.pendingContext });
+        G.pendingContext = null;
+      }
+
       await runStream(phase);
       return;
     }
@@ -1373,6 +1430,27 @@ function parseDiscovery(text) {
           <span class="q-option-label">${esc(opt.text)}</span>`;
         div.appendChild(lbl);
       });
+
+      // "Other — specify" option
+      const otherLbl = document.createElement('label');
+      otherLbl.className = 'q-option';
+      otherLbl.innerHTML = `
+        <input type="${inputType}" name="${groupName}" id="q-other-${qi}" value="__other__">
+        <span class="q-option-letter" style="color:var(--text-faint)">+</span>
+        <span class="q-option-label" style="color:var(--text-dim)">Other — please specify</span>`;
+      div.appendChild(otherLbl);
+
+      const otherText = document.createElement('input');
+      otherText.type = 'text';
+      otherText.id = `q-other-text-${qi}`;
+      otherText.placeholder = 'Please specify…';
+      otherText.style.cssText = 'display:none;margin-top:0.4rem;width:100%;font-size:0.94rem;padding:0.55rem 0.8rem;background:var(--surface3);border:1px solid var(--ember-lo);border-radius:3px;color:var(--text-bright);font-family:var(--ff-body);outline:none;box-sizing:border-box;';
+      div.appendChild(otherText);
+
+      otherLbl.querySelector('input').addEventListener('change', function() {
+        otherText.style.display = this.checked ? 'block' : 'none';
+        if (this.checked) setTimeout(() => otherText.focus(), 50);
+      });
     } else {
       // Fallback: free-text textarea
       const ta = document.createElement('textarea');
@@ -1409,11 +1487,26 @@ function parseResearch(text) {
   }
 
   G.masterSource = match[1].trim();
-  localStorage.removeItem('cf_checkpoint'); // ← clear checkpoint on success
+
+  // Parse top picks if present
+  G.topPicks = [];
+  const picksMatch = text.match(/TOP_PICKS_START\s*([\s\S]*?)\s*TOP_PICKS_END/);
+  if (picksMatch) {
+    G.topPicks = picksMatch[1].trim().split('\n')
+      .filter(l => l.trim())
+      .map(line => {
+        const m = line.match(/^\d+\.\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)$/);
+        return m ? { name: m[1].trim(), reason: m[2].trim(), url: m[3].trim() } : null;
+      }).filter(Boolean);
+  }
+
+  localStorage.removeItem('cf_checkpoint');
   setProgress(100, 'Complete');
   setPill('complete', 'Complete');
   document.getElementById('res-dot').classList.remove('pulsing');
   document.getElementById('res-dot').classList.add('done');
+  document.getElementById('run-context-btn-wrap').style.display = 'none';
+  document.getElementById('run-context-wrap').style.display = 'none';
 
   logRunToFirestore();
   showComplete();
@@ -1522,6 +1615,30 @@ function showComplete() {
     <div class="complete-stat">Logged to: <span>Firebase / triplog-6b5ab</span></div>
     <div class="complete-stat">Next update due: <span>${nextUpdateDate()}</span></div>
   `;
+
+  // Render top picks
+  const picksEl = document.getElementById('top-picks-section');
+  if (G.topPicks && G.topPicks.length > 0) {
+    picksEl.style.display = 'block';
+    picksEl.innerHTML = `
+      <h3 style="font-family:var(--ff-display);font-size:0.96rem;color:var(--text-bright);letter-spacing:0.06em;margin-bottom:1rem;text-transform:uppercase;">Top Recommendations</h3>
+      <ol style="list-style:none;margin:0;padding:0;">
+        ${G.topPicks.map((p, i) => `
+          <li style="display:flex;gap:0.9rem;align-items:flex-start;padding:0.8rem 0;${i < G.topPicks.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}">
+            <span style="font-family:var(--ff-display);font-size:1.15rem;color:var(--ember);font-weight:700;min-width:1.6rem;flex-shrink:0;line-height:1.3;">${i + 1}</span>
+            <div style="flex:1;min-width:0;">
+              <a href="${esc(p.url)}" target="_blank" rel="noopener noreferrer"
+                 style="font-family:var(--ff-display);font-size:0.96rem;color:var(--ember-hi);text-decoration:none;font-weight:600;display:inline-block;margin-bottom:0.2rem;word-break:break-word;">
+                ${esc(p.name)} <span style="font-size:0.8em;opacity:0.7;">↗</span>
+              </a>
+              <div style="font-family:var(--ff-body);font-size:0.88rem;color:var(--text-dim);line-height:1.5;">${esc(p.reason)}</div>
+            </div>
+          </li>`).join('')}
+      </ol>`;
+  } else {
+    picksEl.style.display = 'none';
+  }
+
   showScreen('complete');
 }
 
@@ -1643,6 +1760,31 @@ function updateTracker() {
 // ═══════════════════════════════════════════
 // REFINE
 // ═══════════════════════════════════════════
+function toggleRunContext() {
+  const wrap = document.getElementById('run-context-wrap');
+  const btn  = document.getElementById('run-context-toggle-btn');
+  const open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? '➕ Add Context to This Run' : '✕ Cancel';
+  if (!open) setTimeout(() => document.getElementById('run-context-input').focus(), 50);
+}
+
+function addRunContext() {
+  const input = document.getElementById('run-context-input');
+  const val = input.value.trim();
+  if (!val) return;
+  G.pendingContext = (G.pendingContext ? G.pendingContext + '\n\n' : '') +
+    `[Additional context added by buyer during research: ${val}]`;
+  input.value = '';
+  const confirm = document.getElementById('run-context-confirm');
+  confirm.style.display = 'block';
+  setTimeout(() => {
+    confirm.style.display = 'none';
+    document.getElementById('run-context-wrap').style.display = 'none';
+    document.getElementById('run-context-toggle-btn').textContent = '➕ Add Context to This Run';
+  }, 2500);
+}
+
 function showRefine() {
   document.getElementById('refine-input').value = '';
   document.getElementById('refine-input-box').style.display = 'block';
@@ -1814,6 +1956,7 @@ async function runRefineStream(attempt = 0) {
 // ═══════════════════════════════════════════
 function doReset() {
   G.topic = null; G.conversation = []; G.masterSource = null;
+  G.topPicks = []; G.pendingContext = null;
   G.questions = []; G.priorAnswers = []; G.searchCount = 0; G.callCount = 0;
   document.getElementById('topic-input').value = '';
   document.getElementById('q-loading').style.display = 'none';
@@ -1821,6 +1964,9 @@ function doReset() {
   document.getElementById('q-items').innerHTML = '';
   document.getElementById('res-dot').classList.remove('done');
   document.getElementById('res-dot').classList.add('pulsing');
+  document.getElementById('run-context-btn-wrap').style.display = 'none';
+  document.getElementById('run-context-wrap').style.display = 'none';
+  document.getElementById('top-picks-section').style.display = 'none';
   clearStream();
   showScreen('topic');
   document.getElementById('topic-input').focus();
@@ -1889,3 +2035,4 @@ function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); re
 
 </body>
 </html>
+
