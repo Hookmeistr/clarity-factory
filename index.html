@@ -91,7 +91,16 @@
       background: linear-gradient(to bottom, #111310, var(--bg));
     }
 
-    .brand { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; min-width: 0; }
+    .brand { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; min-width: 0; }
+
+    #brand-logo {
+      height: 36px;
+      width: 36px;
+      border-radius: 7px;
+      cursor: pointer;
+      flex-shrink: 0;
+      display: block;
+    }
 
     .brand-name {
       font-family: var(--ff-display);
@@ -668,9 +677,10 @@
 
 <header>
   <div class="brand">
+    <img id="brand-logo" src="icon-192.png?v=9" alt="The Clarity Factory logo" onclick="goHome()">
     <span class="brand-name" onclick="goHome()">The Clarity Factory</span>
     <span class="brand-tag">Comprehensive · Current · On Demand</span>
-    <span id="app-version">v8</span>
+    <span id="app-version">v9</span>
   </div>
   <div class="hdr-right">
     <div id="auth-status" onclick="handleAuthClick()" title="Sign in to save your guides across devices">
