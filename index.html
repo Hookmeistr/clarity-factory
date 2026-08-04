@@ -680,7 +680,7 @@
     <img id="brand-logo" src="icon-192.png?v=9" alt="The Clarity Factory logo" onclick="goHome()">
     <span class="brand-name" onclick="goHome()">The Clarity Factory</span>
     <span class="brand-tag">Comprehensive · Current · On Demand</span>
-    <span id="app-version">v9</span>
+    <span id="app-version">v2.0.0</span>
   </div>
   <div class="hdr-right">
     <div id="auth-status" onclick="handleAuthClick()" title="Sign in to save your guides across devices">
@@ -2300,7 +2300,9 @@ function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); re
 // ═══════════════════════════════════════════
 // VERSION / LAST-UPDATED STAMP (rendered in viewer's local timezone)
 // ═══════════════════════════════════════════
-const BUILD_VERSION = 'v10';
+// Semantic versioning: MAJOR.MINOR.PATCH
+//   MAJOR = architectural change · MINOR = new feature · PATCH = fix/tweak
+const BUILD_VERSION = 'v2.0.0';
 // Last-updated stamp is read live from the GitHub commit history so it can never go stale.
 const BUILD_TIME_FALLBACK = new Date('2026-08-04T09:12:00Z');
 
