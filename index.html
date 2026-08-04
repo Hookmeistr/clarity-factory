@@ -680,7 +680,7 @@
     <img id="brand-logo" src="icon-192.png?v=9" alt="The Clarity Factory logo" onclick="goHome()">
     <span class="brand-name" onclick="goHome()">The Clarity Factory</span>
     <span class="brand-tag">Comprehensive · Current · On Demand</span>
-    <span id="app-version">v2.0.0</span>
+    <span id="app-version">v2.0</span>
   </div>
   <div class="hdr-right">
     <div id="auth-status" onclick="handleAuthClick()" title="Sign in to save your guides across devices">
@@ -2300,33 +2300,55 @@ function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); re
 // ═══════════════════════════════════════════
 // VERSION / LAST-UPDATED STAMP (rendered in viewer's local timezone)
 // ═══════════════════════════════════════════
-// Semantic versioning: MAJOR.MINOR.PATCH
-//   MAJOR = architectural change · MINOR = new feature · PATCH = fix/tweak
-const BUILD_VERSION = 'v2.0.0';
-// Last-updated stamp is read live from the GitHub commit history so it can never go stale.
-const BUILD_TIME_FALLBACK = new Date('2026-08-04T09:12:00Z');
+// Version is derived from the repo's ACTUAL revision history.
+//   MAJOR.MINOR = milestone, set deliberately below
+//   PATCH       = real commit count in the repo (auto, never hand-maintained)
+const VERSION_MAJOR_MINOR = '2.0';
+const BUILD_VERSION = 'v' + VERSION_MAJOR_MINOR;   // fallback until commits load
+const BUILD_TIME_FALLBACK = new Date('2026-08-04T17:46:00Z');
 
-function paintVersion(d) {
-  try {
-    const s = d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
-    });
-    document.getElementById('app-version').textContent = BUILD_VERSION + ' \u00b7 Updated ' + s;
-  } catch (e) {
-    document.getElementById('app-version').textContent = BUILD_VERSION;
+function paintVersion(version, d) {
+  const el = document.getElementById('app-version');
+  if (!el) return;
+  let out = version;
+  if (d) {
+    try {
+      out += ' \u00b7 Updated ' + d.toLocaleString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+      });
+    } catch (e) {}
   }
+  el.textContent = out;
+}
+
+async function countCommits() {
+  let total = 0;
+  for (let page = 1; page <= 5; page++) {
+    const r = await fetch(
+      'https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=100&page=' + page,
+      { cache: 'no-store' });
+    if (!r.ok) throw new Error('commits unavailable');
+    const arr = await r.json();
+    if (!Array.isArray(arr)) throw new Error('unexpected response');
+    total += arr.length;
+    if (arr.length < 100) break;
+  }
+  return total;
 }
 
 (function renderVersion() {
-  paintVersion(BUILD_TIME_FALLBACK);
-  fetch('https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=1', { cache: 'no-store' })
-    .then(r => r.ok ? r.json() : null)
-    .then(j => {
-      const iso = j && j[0] && j[0].commit && (j[0].commit.committer || j[0].commit.author).date;
-      if (iso) paintVersion(new Date(iso));
-    })
-    .catch(() => {});
+  paintVersion(BUILD_VERSION, BUILD_TIME_FALLBACK);
+  (async () => {
+    try {
+      const latest = await fetch(
+        'https://api.github.com/repos/Hookmeistr/clarity-factory/commits?per_page=1',
+        { cache: 'no-store' }).then(r => r.ok ? r.json() : null);
+      const iso = latest && latest[0] && (latest[0].commit.committer || latest[0].commit.author).date;
+      const count = await countCommits();
+      paintVersion('v' + VERSION_MAJOR_MINOR + '.' + count, iso ? new Date(iso) : BUILD_TIME_FALLBACK);
+    } catch (e) { /* keep fallback */ }
+  })();
 })();
 
 // ═══════════════════════════════════════════
