@@ -4,9 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>The Clarity Factory</title>
-  <link rel="icon" type="image/x-icon" href="favicon.ico?v=8">
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=8">
-  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v=8">
+  <link rel="icon" type="image/x-icon" href="favicon.ico?v=9">
+  <link rel="shortcut icon" type="image/x-icon" href="favicon.ico?v=9">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=9">
+  <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v=9">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0e100d">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -85,10 +86,12 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 0.75rem 1.25rem;
+      flex-wrap: wrap;
       background: linear-gradient(to bottom, #111310, var(--bg));
     }
 
-    .brand { display: flex; align-items: baseline; gap: 0.8rem; }
+    .brand { display: flex; align-items: baseline; gap: 0.8rem; flex-wrap: wrap; min-width: 0; }
 
     .brand-name {
       font-family: var(--ff-display);
@@ -115,6 +118,7 @@
       letter-spacing: 0.04em;
       margin-top: 0.15rem;
       opacity: 0.75;
+      white-space: nowrap;
     }
 
     #auth-status {
@@ -2176,8 +2180,8 @@ function nextUpdateDate() { const d = new Date(); d.setMonth(d.getMonth()+3); re
 // ═══════════════════════════════════════════
 // VERSION / LAST-UPDATED STAMP (rendered in viewer's local timezone)
 // ═══════════════════════════════════════════
-const BUILD_VERSION = 'v8';
-const BUILD_TIME = new Date('2026-08-03T20:50:00Z'); // set at each push
+const BUILD_VERSION = 'v9';
+const BUILD_TIME = new Date('2026-08-04T09:12:00Z'); // real push time (renders in viewer local zone)
 (function renderVersion() {
   try {
     const s = BUILD_TIME.toLocaleString(undefined, {
