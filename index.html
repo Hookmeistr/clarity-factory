@@ -1036,9 +1036,16 @@ let G = {
   pendingContext: null   // ← context injected mid-run by user
 };
 
-const MODEL     = 'claude-sonnet-4-6';
-const PRICE_IN  = 3  / 1_000_000;
-const PRICE_OUT = 15 / 1_000_000;
+const MODEL     = 'claude-sonnet-5';
+// Effort controls how much work the model puts into each response, including how
+// many searches it runs. 'high' is Sonnet 5's default and the right level for
+// research-grade output. 'medium' is the cost-saving step down.
+const EFFORT    = 'high';
+// Claude Sonnet 5: introductory $2/$10 per Mtok through 2026-08-31, then $3/$15.
+const INTRO_PRICING_ENDS = new Date('2026-09-01T00:00:00Z');
+const _introActive = Date.now() < INTRO_PRICING_ENDS.getTime();
+const PRICE_IN  = (_introActive ? 2  : 3)  / 1_000_000;
+const PRICE_OUT = (_introActive ? 10 : 15) / 1_000_000;
 const COLLECTION = 'clarity_factory_runs';
 const MONTHLY_COLLECTION = 'clarity_factory_monthly';
 // Only this account's runs are stored as individual rows. Everyone else's runs
@@ -1349,7 +1356,8 @@ async function runStream(phase, attempt = 0) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: phase === 'research' ? 12000 : 4096,
+        max_tokens: phase === 'research' ? 32000 : 12000,
+        output_config: { effort: EFFORT },
         system: SYS,
         messages: (function() {
           if (G.conversation.length <= 3) return G.conversation;
@@ -2167,7 +2175,8 @@ async function runRefineStream(attempt = 0) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 12000,
+        max_tokens: 24000,
+        output_config: { effort: EFFORT },
         system: SYS,
         messages: (function() {
           if (G.conversation.length <= 3) return G.conversation;
