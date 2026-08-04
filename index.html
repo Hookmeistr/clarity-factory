@@ -706,7 +706,7 @@
       <span id="auth-label">Sign in</span>
     </div>
     <button class="hdr-btn" id="guides-btn" onclick="showGuides()" style="display:none;">📚 My Guides</button>
-    <button class="hdr-btn" id="dash-btn" onclick="showDashboard()">📊 Cost Dashboard</button>
+    <button class="hdr-btn" id="dash-btn" onclick="showDashboard()" style="display:none;">📊 Cost Dashboard</button>
     <div id="hdr-key-status" style="display:none;">No key loaded</div>
   </div>
 </header>
@@ -1803,6 +1803,7 @@ async function loadDashboard() {
 }
 
 function showDashboard() {
+  if (!isOwnerUser()) { goHome(); return; }
   showScreen('dashboard');
   loadDashboard();
 }
@@ -2494,6 +2495,18 @@ function signOutGoogle() {
   updateAuthUI(false);
 }
 
+// The Cost Dashboard is owner-only. Note: this hides the UI, it is not a security
+// boundary — Firestore rules are what actually restrict the data.
+function applyOwnerVisibility() {
+  const owner = isOwnerUser();
+  const db = document.getElementById('dash-btn');
+  if (db) db.style.display = owner ? '' : 'none';
+  if (!owner) {
+    const scr = document.getElementById('scr-dashboard');
+    if (scr && scr.classList.contains('active')) goHome();
+  }
+}
+
 function updateAuthUI(signedIn) {
   const box = document.getElementById('auth-status');
   const icon = document.getElementById('auth-icon');
@@ -2506,6 +2519,7 @@ function updateAuthUI(signedIn) {
     box.title = 'Signed in as ' + googleAuth.profile.email + ' — click to sign out';
     if (nudge) nudge.style.display = 'none';
     const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = '';
+    applyOwnerVisibility();
   } else {
     box.classList.remove('signed-in');
     icon.textContent = '○';
@@ -2513,6 +2527,7 @@ function updateAuthUI(signedIn) {
     box.title = 'Sign in to save your guides across devices';
     if (nudge) nudge.style.display = 'block';
     const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = 'none';
+    applyOwnerVisibility();
   }
 }
 
@@ -2747,6 +2762,7 @@ async function saveNamedGuideToDrive(name, content) {
   return true;
 }
 
+applyOwnerVisibility();
 initGoogleAuth();
 
 </script>
