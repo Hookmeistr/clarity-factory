@@ -1449,9 +1449,9 @@ function doKey() {
    the owner's own spend for the current calendar month before any run starts:
    warns past the soft line, refuses past the hard line. Added 2026-08-05.
    ═══════════════════════════════════════════ */
-const BUDGET_MONTHLY_CAP  = 65;                        // USD, set by Patrick
-const BUDGET_WARN_AT      = BUDGET_MONTHLY_CAP * 0.80; // $52
-const BUDGET_STOP_AT      = BUDGET_MONTHLY_CAP * 0.92; // $59.80
+const BUDGET_MONTHLY_CAP  = 65;                        // USD of Anthropic API spend per calendar month
+const BUDGET_WARN_AT      = BUDGET_MONTHLY_CAP * 0.80; // warn from $52
+const BUDGET_STOP_AT      = BUDGET_MONTHLY_CAP;        // hard stop at the cap itself, $65
 
 async function monthlySpendSoFar() {
   try {
@@ -1471,13 +1471,13 @@ async function monthlySpendSoFar() {
 async function budgetGate(errElId) {
   const spent = await monthlySpendSoFar();
   if (spent >= BUDGET_STOP_AT) {
-    const msg = `Monthly budget guard: $${spent.toFixed(2)} of the $${BUDGET_MONTHLY_CAP} cap is already spent this month. ` +
-                `Runs are blocked past $${BUDGET_STOP_AT.toFixed(2)}. Raise BUDGET_MONTHLY_CAP or wait for the new month.`;
+    const msg = `Monthly API budget reached: $${spent.toFixed(2)} of your $${BUDGET_MONTHLY_CAP} cap has been spent this ` +
+                `calendar month, so new runs are blocked until the 1st. Raise BUDGET_MONTHLY_CAP in index.html to change the cap.`;
     if (errElId) showErr(errElId, msg); else alert(msg);
     return false;
   }
   if (spent >= BUDGET_WARN_AT) {
-    return confirm(`Heads up: $${spent.toFixed(2)} of your $${BUDGET_MONTHLY_CAP} monthly cap is already spent. ` +
+    return confirm(`Heads up: $${spent.toFixed(2)} of your $${BUDGET_MONTHLY_CAP} monthly API cap has been spent. ` +
                    `A full guide run typically costs $0.10-$0.35. Continue?`);
   }
   return true;
@@ -3161,6 +3161,68 @@ async function _ensureReportsFolderOnce() {
   } catch (e) { console.warn('folder error', e); return null; }
 }
 
+/* Per-topic subfolder inside the Reports folder, so guides stay organised by
+   subject the way Patrick organises everything else, rather than piling into one
+   flat folder. Structure: Clarity Factory Reports / <Topic> / <files>.
+   Guarded per name so two concurrent saves can't create the folder twice.
+   Added 2026-08-05. */
+const _topicFolderCache = {};
+const _topicFolderInFlight = {};
+
+function topicFolderName(topic) {
+  return String(topic || 'Untitled')
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .slice(0, 80) || 'Untitled';
+}
+
+async function ensureTopicFolder(topic) {
+  const parent = await ensureReportsFolder();
+  if (!parent) return null;
+  const name = topicFolderName(topic);
+  if (_topicFolderCache[name]) return _topicFolderCache[name];
+  if (_topicFolderInFlight[name]) return _topicFolderInFlight[name];
+
+  _topicFolderInFlight[name] = (async () => {
+    try {
+      const safe = name.replace(/'/g, "\\'");
+      const q = encodeURIComponent(
+        `name='${safe}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`
+      );
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime&fields=files(id,name)`,
+        { headers: { Authorization: 'Bearer ' + googleAuth.token } }
+      );
+      const data = await res.json();
+      let id = (data.files && data.files.length) ? data.files[0].id : null;
+      if (!id) {
+        const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parent] })
+        });
+        id = (await createRes.json()).id || null;
+      }
+      if (id) _topicFolderCache[name] = id;
+      return id;
+    } catch (e) { console.warn('topic folder error', e); return null; }
+  })();
+
+  try { return await _topicFolderInFlight[name]; }
+  finally { delete _topicFolderInFlight[name]; }
+}
+
+// Where a guide's files belong: its topic subfolder, falling back to the Reports
+// folder, falling back to Drive root if even that failed.
+async function guideParents(topic) {
+  const id = await ensureTopicFolder(topic);
+  if (id) return [id];
+  if (googleAuth.folderId) return [googleAuth.folderId];
+  return undefined;
+}
+
 // Save the current guide's .md to the user's own Drive
 async function saveGuideToDrive() {
   if (!googleAuth.token || !G.masterSource) return false;
@@ -3169,7 +3231,7 @@ async function saveGuideToDrive() {
   try {
     const meta = {
       name: `${slug(G.topic)}_${new Date().toISOString().slice(0,10)}.md`,
-      parents: googleAuth.folderId ? [googleAuth.folderId] : undefined,
+      parents: await guideParents(G.topic),
       description: 'Clarity Factory guide: ' + G.topic
     };
     const boundary = 'cf_boundary_' + Date.now();
@@ -3185,7 +3247,7 @@ async function saveGuideToDrive() {
       body
     });
     if (res.ok) {
-      if (statusEl) { statusEl.style.display='block'; statusEl.style.background='rgba(70,150,100,0.12)'; statusEl.style.color='#6ca'; statusEl.textContent='✓ Saved to your Google Drive → Clarity Factory Reports'; }
+      if (statusEl) { statusEl.style.display='block'; statusEl.style.background='rgba(70,150,100,0.12)'; statusEl.style.color='#6ca'; statusEl.textContent='✓ Saved to your Google Drive → Clarity Factory Reports → ' + topicFolderName(G.topic); }
       return true;
     }
   } catch (e) { console.warn('drive save error', e); }
@@ -3202,7 +3264,7 @@ async function saveBlobToDrive(blob, filename, mime) {
   try {
     const meta = {
       name: filename,
-      parents: googleAuth.folderId ? [googleAuth.folderId] : undefined,
+      parents: await guideParents(G.topic),
       description: 'Clarity Factory guide: ' + G.topic
     };
     const boundary = 'cf_boundary_' + Date.now();
@@ -3668,7 +3730,7 @@ function gvPdf() {
     if (typeof googleAuth !== 'undefined' && googleAuth && googleAuth.token) {
       built.getBlob(blob => {
         saveBlobToDrive(blob, name, 'application/pdf').then(ok => {
-          if (ok) st.textContent = 'PDF downloaded, and saved to your Drive → Clarity Factory Reports.';
+          if (ok) st.textContent = 'PDF downloaded, and saved to your Drive → Clarity Factory Reports → ' + topicFolderName(G.topic);
         });
       });
     }
