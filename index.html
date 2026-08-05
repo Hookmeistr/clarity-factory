@@ -1303,7 +1303,7 @@ Output the complete MASTER_SOURCE EXACTLY between these markers:
 | Scope | [brief scope] |
 | Edition | Living document |
 | Last FULL update | [today YYYY-MM-DD] |
-| Last update model | Claude Sonnet 4.6 |
+| Last update model | [leave this exactly as: PENDING â€” the app fills it in] |
 | Next scheduled update | [+3 months] |
 | Update cadence | Quarterly |
 
@@ -1826,6 +1826,19 @@ function parseDiscovery(text) {
 // ═══════════════════════════════════════════
 // PARSE RESEARCH
 // ═══════════════════════════════════════════
+// Stamp the ACTUAL model into the guide metadata. The model used to copy
+// "Claude Sonnet 4.6" out of the prompt template, which was simply wrong.
+function stampModelName(md) {
+  if (!md) return md;
+  const pretty = (typeof MODEL === 'string' && MODEL)
+    ? MODEL.replace(/^claude-/, 'Claude ')
+           .replace(/-/g, ' ')
+           .replace(/\b\w/g, c => c.toUpperCase())
+    : 'Claude Sonnet 5';
+  const eff = (typeof EFFORT === 'string' && EFFORT) ? ` (effort: ${EFFORT})` : '';
+  return md.replace(/^(\|\s*Last update model\s*\|).*$/mi, `$1 ${pretty}${eff} |`);
+}
+
 function parseResearch(text) {
   const match = text.match(/===MASTER_SOURCE_START===([\s\S]*?)===MASTER_SOURCE_END===/);
 
@@ -1840,7 +1853,7 @@ function parseResearch(text) {
     return;
   }
 
-  G.masterSource = match[1].trim();
+  G.masterSource = stampModelName(match[1].trim());
 
   // Parse top picks if present
   G.topPicks = [];
@@ -2460,7 +2473,7 @@ async function runRefineStream(attempt = 0) {
       return;
     }
 
-    G.masterSource = match[1].trim();
+    G.masterSource = stampModelName(match[1].trim());
 
     // Re-parse the Top 5 on refine. Without this every re-run silently lost it.
     const rPicks = fullText.match(/TOP_PICKS_START\s*([\s\S]*?)\s*TOP_PICKS_END/);
