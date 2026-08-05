@@ -27,14 +27,21 @@
     padding:3rem 3.6rem;max-width:none;width:100%;
     box-shadow:0 2px 18px rgba(0,0,0,.35);}
 
-  /* Reset every inherited app colour and font inside the document */
-  #gv-page,#gv-page *{
+  /* Reset every inherited app colour and font inside the document.
+     NOTE: this selector must NOT include #gv-page itself — doing so
+     overrode the white page background with `transparent` and left the
+     app's dark theme showing through. Fixed 2026-08-05. */
+  #gv-page *{
     color:#14181c !important;
     background-color:transparent !important;
     font-family:"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif !important;
     text-shadow:none !important;
   }
-  #gv-page{font-size:16px;line-height:1.62;}
+  #gv-page{
+    color:#14181c !important;
+    font-family:"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif !important;
+    font-size:16px;line-height:1.62;
+  }
 
   #gv-page h1{font-size:2rem;line-height:1.24;margin:0 0 .35rem;letter-spacing:-.3px;font-weight:700;}
   #gv-page h2{font-size:1.34rem;margin:2.2rem 0 .7rem;padding-bottom:.4rem;
@@ -3256,7 +3263,19 @@ function showGuideView() {
 }
 
 function gvRerun() { showRefine(); }
-function gvPrint() { window.print(); }
+
+// Exports use the guide's own .md filename, so .docx / .html / .pdf all match
+// the source file and each other. Falls back to topic + today's date.
+function gvBaseName() {
+  if (G.guideFileBase && G.guideFileBase.length) return G.guideFileBase;
+  return slug(G.topic) + '_' + new Date().toISOString().slice(0, 10);
+}
+
+function gvPrint() {
+  document.getElementById('gv-status').textContent =
+    'In the print dialog, set Destination to "Save as PDF", then Save.';
+  setTimeout(function () { window.print(); }, 60);
+}
 
 /* ---------- Word (.docx) export — no external library ---------- */
 const GV_CRC = (() => { const t = new Uint32Array(256);
@@ -3411,7 +3430,7 @@ function gvDocx() {
   const st = document.getElementById('gv-status');
   try {
     st.textContent = 'Building Word document…';
-    gvSave(gvDocxBuild(), slug(G.topic) + '.docx');
+    gvSave(gvDocxBuild(), gvBaseName() + '.docx');
     st.textContent = 'Word document downloaded.';
   } catch (err) {
     st.textContent = 'Word export failed: ' + err.message;
@@ -3432,7 +3451,7 @@ function gvHtml() {
 <style>body{background:#fff;color:#1a1a1a;font:16px/1.6 "Segoe UI",Arial,sans-serif;max-width:860px;margin:40px auto;padding:0 24px}
 ${css.replace(/#gv-page\s?/g,'body ').replace(/\.screen[^{]*{[^}]*}/g,'')}</style></head>
 <body>${document.getElementById('gv-page').innerHTML}</body></html>`;
-  gvSave(new Blob([html], {type:'text/html'}), slug(G.topic) + '.html');
+  gvSave(new Blob([html], {type:'text/html'}), gvBaseName() + '.html');
   document.getElementById('gv-status').textContent = 'HTML downloaded.';
 }
 
@@ -3494,6 +3513,7 @@ async function openGuide(fileId, name) {
   try {
     const content = await driveDownloadFile(fileId);
     G.masterSource = content;
+    G.guideFileBase = String(name || '').replace(/\.md$/i, '');
     G.topic = prettyTopicFromName(name);
     G.topPicks = extractTopPicksFromMd(content);
     G.searchCount = G.searchCount || 0;
