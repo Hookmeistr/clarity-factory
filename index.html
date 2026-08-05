@@ -14,6 +14,8 @@
   <meta name="apple-mobile-web-app-title" content="Clarity Factory">
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js"></script>
   
 
   <!-- GUIDE VIEWER styles (added 2026-08-04) -->
@@ -1108,9 +1110,10 @@
       <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="showGuides()">← My Guides</button>
       <span id="gv-status"></span>
       <span style="flex:1"></span>
-      <button class="btn" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvPrint()">Save as PDF / Print</button>
+      <button class="btn" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvPdf()">Download PDF</button>
       <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvDocx()">Download Word (.docx)</button>
       <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvHtml()">Download HTML</button>
+      <button class="btn btn-ghost" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvPrint()">Print</button>
       <button class="btn btn-refine" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;" onclick="gvRerun()">🔧 Re-run with edits</button>
     </div>
     <div id="gv-page"></div>
@@ -3215,8 +3218,9 @@ function gvMdToHtml(md) {
     }
     if (/^\s*\d+\.\s+/.test(L)) {
       const buf = [];
+      const olStart = parseInt((L.match(/^\s*(\d+)\./) || [0,'1'])[1], 10) || 1;
       while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) buf.push(lines[i++].replace(/^\s*\d+\.\s+/,''));
-      out += '<ol>' + buf.map(b=>`<li>${gvInline(b)}</li>`).join('') + '</ol>'; continue;
+      out += `<ol start="${olStart}">` + buf.map(b=>`<li>${gvInline(b)}</li>`).join('') + '</ol>'; continue;
     }
     const buf = [];
     while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^[|>#]|^---+|^\s*[-*+]\s|^\s*\d+\.\s/.test(lines[i])) buf.push(lines[i++]);
@@ -3282,6 +3286,7 @@ const GVX = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 
 function gvDocxBuild() {
   const rels = [];
+  const olNums = [];
   const addRel = (type, target, ext) => {
     const id = 'rId' + (100 + rels.length);
     rels.push(`<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"${ext?' TargetMode="External"':''}/>`);
@@ -3342,8 +3347,15 @@ function gvDocxBuild() {
       if (/^h[1-4]$/.test(tag)) { body += para(runs(el), 'Heading'+tag[1]); return; }
       if (tag === 'p') { body += para(runs(el), el.classList.contains('gv-sub')||el.classList.contains('gv-meta') ? 'Subtle' : null); return; }
       if (tag === 'ul' || tag === 'ol') {
+        // Each ordered list gets its own numbering definition so it resumes at the
+        // number the source actually used, instead of every list restarting at 1.
+        let nid = 1;
+        if (tag === 'ol') {
+          nid = 100 + olNums.length;
+          olNums.push({ id: nid, start: parseInt(el.getAttribute('start') || '1', 10) || 1 });
+        }
         [].slice.call(el.children).forEach(li => {
-          body += para(runs(li), null, `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${tag==='ul'?1:2}"/></w:numPr><w:spacing w:after="60"/>`);
+          body += para(runs(li), null, `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${nid}"/></w:numPr><w:spacing w:after="60"/>`);
         });
         return;
       }
@@ -3376,7 +3388,8 @@ function gvDocxBuild() {
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="&#8226;"/><w:pPr><w:ind w:left="502" w:hanging="288"/></w:pPr></w:lvl></w:abstractNum>
 <w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="502" w:hanging="288"/></w:pPr></w:lvl></w:abstractNum>
-<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`;
+${olNums.map(n=>`<w:abstractNum w:abstractNumId="${n.id}"><w:lvl w:ilvl="0"><w:start w:val="${n.start}"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:pPr><w:ind w:left="502" w:hanging="288"/></w:pPr></w:lvl></w:abstractNum>`).join('')}
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>${olNums.map(n=>`<w:num w:numId="${n.id}"><w:abstractNumId w:val="${n.id}"/></w:num>`).join('')}</w:numbering>`;
 
   const ct = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -3408,6 +3421,136 @@ function gvDocx() {
     st.textContent = 'Word document downloaded.';
   } catch (err) {
     st.textContent = 'Word export failed: ' + err.message;
+    console.error(err);
+  }
+}
+
+/* ---------- PDF export - real text, no print dialog, no driver ----------
+   Built from the same #gv-page DOM the viewer and the .docx use. Output is a
+   normal text PDF: selectable, copy/paste-able, editable, with live links.
+   Deliberately NOT a screenshot-to-PDF - that produced an image that had to be
+   OCR'd. Added 2026-08-05. */
+
+function gvPdfInline(node, st) {
+  st = st || {};
+  let out = [];
+  node.childNodes.forEach(n => {
+    if (n.nodeType === 3) {
+      const t = n.nodeValue;
+      if (!t) return;
+      const run = { text: t };
+      if (st.b) run.bold = true;
+      if (st.i) run.italics = true;
+      // No monospace font is bundled with pdfmake's default font set; naming one
+      // throws. Code spans stay in the body face.
+      if (st.link) { run.link = st.link; run.color = '#0a5ea8'; run.decoration = 'underline'; }
+      if (st.color) run.color = st.color;
+      out.push(run);
+      return;
+    }
+    if (n.nodeType !== 1) return;
+    const tag = n.tagName.toLowerCase();
+    if (tag === 'a' && n.getAttribute('href')) {
+      out = out.concat(gvPdfInline(n, Object.assign({}, st, { link: n.getAttribute('href') })));
+    } else if (n.classList && n.classList.contains('gv-badge')) {
+      const col = n.classList.contains('exact') ? '#075c4d'
+                : n.classList.contains('most')  ? '#7a4e00' : '#6e2626';
+      out.push({ text: '  [' + n.textContent + ']  ', bold: true, color: col });
+    } else if (tag === 'strong' || tag === 'b') {
+      out = out.concat(gvPdfInline(n, Object.assign({}, st, { b: 1 })));
+    } else if (tag === 'em' || tag === 'i') {
+      out = out.concat(gvPdfInline(n, Object.assign({}, st, { i: 1 })));
+    } else if (tag === 'code') {
+      out = out.concat(gvPdfInline(n, Object.assign({}, st, { mono: 1 })));
+    } else if (tag === 'br') {
+      out.push({ text: '\n' });
+    } else {
+      out = out.concat(gvPdfInline(n, st));
+    }
+  });
+  return out;
+}
+
+function gvPdfCell(td, head) {
+  return { text: gvPdfInline(td, head ? { b: 1 } : {}), fontSize: 8.5 };
+}
+
+function gvPdfWalk(node) {
+  const out = [];
+  [].slice.call(node.children).forEach(el => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'h1') { out.push({ text: gvPdfInline(el), fontSize: 20, bold: true, margin: [0, 2, 0, 6] }); return; }
+    if (tag === 'h2') { out.push({ text: gvPdfInline(el), fontSize: 14.5, bold: true, margin: [0, 16, 0, 2] });
+                        out.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 495, y2: 0, lineWidth: 1.2, lineColor: '#0b6b5b' }], margin: [0, 0, 0, 7] }); return; }
+    if (tag === 'h3') { out.push({ text: gvPdfInline(el), fontSize: 12, bold: true, margin: [0, 11, 0, 4] }); return; }
+    if (tag === 'h4') { out.push({ text: gvPdfInline(el), fontSize: 10.5, bold: true, margin: [0, 9, 0, 3] }); return; }
+    if (tag === 'p') {
+      const sub = el.classList.contains('gv-sub') || el.classList.contains('gv-meta');
+      const p = { text: gvPdfInline(el), fontSize: sub ? 8.5 : 10, margin: [0, 0, 0, sub ? 2 : 7] };
+      if (sub) p.color = '#5c6470';
+      out.push(p);
+      return;
+    }
+    if (tag === 'ul' || tag === 'ol') {
+      const items = [].slice.call(el.children).map(li => ({ text: gvPdfInline(li), fontSize: 10, margin: [0, 0, 0, 3] }));
+      const block = { fontSize: 10, margin: [6, 0, 0, 7] };
+      if (tag === 'ul') block.ul = items;
+      else { block.ol = items; block.start = parseInt(el.getAttribute('start') || '1', 10) || 1; }
+      out.push(block);
+      return;
+    }
+    if (tag === 'table') {
+      const rows = [].slice.call(el.querySelectorAll('tr'));
+      if (!rows.length) return;
+      const body = rows.map(tr => {
+        const head = tr.parentNode.tagName.toLowerCase() === 'thead';
+        return [].slice.call(tr.children).map(td => {
+          const c = gvPdfCell(td, head);
+          if (head) c.fillColor = '#e6f2ef';
+          return c;
+        });
+      });
+      const ncol = body[0].length;
+      out.push({
+        table: { headerRows: rows[0].parentNode.tagName.toLowerCase() === 'thead' ? 1 : 0,
+                 widths: Array(ncol).fill('*'), body: body, dontBreakRows: true },
+        layout: {
+          hLineWidth: () => 0.6, vLineWidth: () => 0.6,
+          hLineColor: () => '#cfd6dc', vLineColor: () => '#cfd6dc',
+          paddingTop: () => 4, paddingBottom: () => 4, paddingLeft: () => 5, paddingRight: () => 5
+        },
+        margin: [0, 0, 0, 10]
+      });
+      return;
+    }
+    if (tag === 'blockquote') { out.push({ text: gvPdfInline(el), fontSize: 10, italics: true, margin: [14, 0, 0, 8] }); return; }
+    if (tag === 'hr') { out.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 495, y2: 0, lineWidth: 0.7, lineColor: '#d7dce1' }], margin: [0, 10, 0, 12] }); return; }
+    gvPdfWalk(el).forEach(x => out.push(x));
+  });
+  return out;
+}
+
+function gvPdf() {
+  const st = document.getElementById('gv-status');
+  try {
+    if (typeof pdfMake === 'undefined') {
+      st.textContent = 'PDF library did not load - check your connection and reload.';
+      return;
+    }
+    st.textContent = 'Building PDF...';
+    const doc = {
+      pageSize: 'LETTER',
+      pageMargins: [54, 54, 54, 60],
+      info: { title: "Buyer's Guide: " + G.topic, author: 'The Clarity Factory' },
+      content: gvPdfWalk(document.getElementById('gv-page')),
+      defaultStyle: { fontSize: 10, lineHeight: 1.25, color: '#14181c' },
+      footer: (cur, tot) => ({ text: cur + ' / ' + tot, alignment: 'center', fontSize: 8, color: '#8a8a8a', margin: [0, 18, 0, 0] })
+    };
+    pdfMake.createPdf(doc).download(gvBaseName() + '.pdf', () => {
+      st.textContent = 'PDF downloaded.';
+    });
+  } catch (err) {
+    st.textContent = 'PDF export failed: ' + err.message;
     console.error(err);
   }
 }
