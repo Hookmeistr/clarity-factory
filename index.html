@@ -1443,12 +1443,53 @@ function doKey() {
   document.getElementById('topic-input').focus();
 }
 
+/* ═══════════════════════════════════════════
+   MONTHLY BUDGET GUARD
+   The Cost Dashboard reported spend but nothing ever stopped a run. This checks
+   the owner's own spend for the current calendar month before any run starts:
+   warns past the soft line, refuses past the hard line. Added 2026-08-05.
+   ═══════════════════════════════════════════ */
+const BUDGET_MONTHLY_CAP  = 65;                        // USD, set by Patrick
+const BUDGET_WARN_AT      = BUDGET_MONTHLY_CAP * 0.80; // $52
+const BUDGET_STOP_AT      = BUDGET_MONTHLY_CAP * 0.92; // $59.80
+
+async function monthlySpendSoFar() {
+  try {
+    if (!window._db || !window._fsGetDocs || !window._fsCollection) return 0;
+    const snap = await window._fsGetDocs(window._fsCollection(window._db, COLLECTION));
+    const month = new Date().toISOString().slice(0, 7);
+    let total = 0;
+    snap.forEach(d => {
+      const r = d.data() || {};
+      const when = (r.ts || r.date || r.createdAt || '').toString();
+      if (when.slice(0, 7) === month) total += (r.cost || 0);
+    });
+    return total;
+  } catch (e) { console.warn('budget check unavailable', e.message); return 0; }
+}
+
+async function budgetGate(errElId) {
+  const spent = await monthlySpendSoFar();
+  if (spent >= BUDGET_STOP_AT) {
+    const msg = `Monthly budget guard: $${spent.toFixed(2)} of the $${BUDGET_MONTHLY_CAP} cap is already spent this month. ` +
+                `Runs are blocked past $${BUDGET_STOP_AT.toFixed(2)}. Raise BUDGET_MONTHLY_CAP or wait for the new month.`;
+    if (errElId) showErr(errElId, msg); else alert(msg);
+    return false;
+  }
+  if (spent >= BUDGET_WARN_AT) {
+    return confirm(`Heads up: $${spent.toFixed(2)} of your $${BUDGET_MONTHLY_CAP} monthly cap is already spent. ` +
+                   `A full guide run typically costs $0.10-$0.35. Continue?`);
+  }
+  return true;
+}
+
 // ═══════════════════════════════════════════
 // TOPIC → PHASE 1 (DISCOVERY)
 // ═══════════════════════════════════════════
 async function doTopic() {
   const t = document.getElementById('topic-input').value.trim();
   if (!t) { showErr('topic-err', 'Please enter a topic.'); return; }
+  if (!(await budgetGate('topic-err'))) return;
   G.topic = t;
   G.conversation = [];
   G.searchCount = 0;
@@ -2305,6 +2346,8 @@ async function startRefinePass(req) {
   document.getElementById('refine-progress-wrap').style.display = 'block';
   hideErr('refine-err');
 
+  if (!(await budgetGate('refine-err'))) { showScreen('refine'); document.getElementById('refine-input-box').style.display = 'block'; document.getElementById('refine-progress-wrap').style.display = 'none'; return; }
+
   // Reset per-run counters but keep existing masterSource
   G.searchCount = 0;
   G.callCount = 0;
@@ -3080,12 +3123,26 @@ function updateAuthUI(signedIn) {
   }
 }
 
-// Find or create the Reports folder in the user's Drive
+// Find or create the Reports folder in the user's Drive.
+// Guarded by a single in-flight promise: concurrent callers used to each miss the
+// lookup and each create a folder, which is how two "Clarity Factory Reports"
+// folders appeared at Drive root seconds apart. Fixed 2026-08-05.
+let _reportsFolderInFlight = null;
 async function ensureReportsFolder() {
+  if (googleAuth.folderId) return googleAuth.folderId;
+  if (_reportsFolderInFlight) return _reportsFolderInFlight;
+  _reportsFolderInFlight = _ensureReportsFolderOnce();
+  try { return await _reportsFolderInFlight; }
+  finally { _reportsFolderInFlight = null; }
+}
+
+async function _ensureReportsFolderOnce() {
   try { await ensureToken(); } catch(e) { return null; }
   try {
     const q = encodeURIComponent(`name='${REPORTS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
+    // orderBy createdTime so that if duplicates already exist we always converge on
+    // the oldest one rather than picking a different folder on each session.
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime&fields=files(id,name,createdTime)`, {
       headers: { Authorization: 'Bearer ' + googleAuth.token }
     });
     const data = await res.json();
@@ -3134,6 +3191,34 @@ async function saveGuideToDrive() {
   } catch (e) { console.warn('drive save error', e); }
   if (statusEl) { statusEl.style.display='block'; statusEl.style.background='rgba(200,92,40,0.12)'; statusEl.style.color='var(--ember)'; statusEl.textContent='Could not save to Drive — your download still works.'; }
   return false;
+}
+
+// Upload a binary blob (the generated PDF) to the same Reports folder as the .md,
+// so both halves of the deliverable land in one predictable place instead of the
+// PDF going to the browser's download folder only. Added 2026-08-05.
+async function saveBlobToDrive(blob, filename, mime) {
+  if (!googleAuth.token) return false;
+  await ensureReportsFolder();
+  try {
+    const meta = {
+      name: filename,
+      parents: googleAuth.folderId ? [googleAuth.folderId] : undefined,
+      description: 'Clarity Factory guide: ' + G.topic
+    };
+    const boundary = 'cf_boundary_' + Date.now();
+    const head = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
+      JSON.stringify(meta),
+      `\r\n--${boundary}\r\nContent-Type: ${mime}\r\nContent-Transfer-Encoding: binary\r\n\r\n`
+    ]);
+    const tail = new Blob([`\r\n--${boundary}--`]);
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'multipart/related; boundary=' + boundary },
+      body: new Blob([head, blob, tail])
+    });
+    return res.ok;
+  } catch (e) { console.warn('drive blob save error', e); return false; }
 }
 
 // Load past guides from the user's Drive (history)
@@ -3575,9 +3660,18 @@ function gvPdf() {
       defaultStyle: { fontSize: 10, lineHeight: 1.25, color: '#14181c' },
       footer: (cur, tot) => ({ text: cur + ' / ' + tot, alignment: 'center', fontSize: 8, color: '#8a8a8a', margin: [0, 18, 0, 0] })
     };
-    pdfMake.createPdf(doc).download(gvBaseName() + '.pdf', () => {
-      st.textContent = 'PDF downloaded.';
-    });
+    const name = gvBaseName() + '.pdf';
+    const built = pdfMake.createPdf(doc);
+    built.download(name, () => { st.textContent = 'PDF downloaded.'; });
+    // Also drop a copy next to the .md in Drive when signed in, so the guide's two
+    // halves stay together instead of the PDF living only in Downloads.
+    if (typeof googleAuth !== 'undefined' && googleAuth && googleAuth.token) {
+      built.getBlob(blob => {
+        saveBlobToDrive(blob, name, 'application/pdf').then(ok => {
+          if (ok) st.textContent = 'PDF downloaded, and saved to your Drive → Clarity Factory Reports.';
+        });
+      });
+    }
   } catch (err) {
     st.textContent = 'PDF export failed: ' + err.message;
     console.error(err);
