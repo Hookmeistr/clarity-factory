@@ -1345,7 +1345,7 @@ RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anyt
 After the MASTER_SOURCE markers, output your top 5 recommendations in this exact format:
 
 TOP_PICKS_START
-1. [Product/Brand Name] | [One-line reason it tops the list] | [Best URL — brand product page, Amazon, or top retailer found during research]
+1. [Product/Brand Name] | [TIER â€” one of MEETS EXACT CRITERIA / MEETS MOST CRITERIA / MEETS MINIMAL CRITERIA â€” followed by an em dash and a one-line reason, plus any hard requirement it misses] | [Best URL — brand product page, Amazon, or top retailer found during research]
 2. [Product/Brand Name] | [One-line reason] | [URL]
 3. [Product/Brand Name] | [One-line reason] | [URL]
 4. [Product/Brand Name] | [One-line reason] | [URL]
@@ -1364,7 +1364,13 @@ Your job:
 2. Integrate the new information into the existing MASTER_SOURCE
 3. Do NOT re-research anything already covered — only fill in what is missing
 4. Add a dated changelog entry describing exactly what was added
-5. Output the complete updated MASTER_SOURCE between the standard markers
+5. PRESERVE EVERYTHING already in the MASTER_SOURCE. A refine ADDS and UPDATES; it must never
+   summarise, condense, or drop existing products, brands, criteria, trends, or changelog entries.
+   The updated file must contain at least as much detail as the one you were given.
+6. Output the complete updated MASTER_SOURCE between the standard markers
+7. AFTER the MASTER_SOURCE markers you MUST also output the TOP_PICKS block, in exactly the
+   same format as a full run. This is mandatory on every refine â€” a refine that omits it has
+   failed. Re-rank the top 5 taking the refinement request into account.
 
 ===MASTER_SOURCE_START===
 [full updated MASTER_SOURCE here]
@@ -2455,6 +2461,34 @@ async function runRefineStream(attempt = 0) {
     }
 
     G.masterSource = match[1].trim();
+
+    // Re-parse the Top 5 on refine. Without this every re-run silently lost it.
+    const rPicks = fullText.match(/TOP_PICKS_START\s*([\s\S]*?)\s*TOP_PICKS_END/);
+    if (rPicks) {
+      const parsed = rPicks[1].trim().split('\n')
+        .filter(l => l.trim())
+        .map(line => {
+          const m = line.match(/^\d+\.\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)$/);
+          return m ? { name: m[1].trim(), reason: m[2].trim(), url: m[3].trim() } : null;
+        }).filter(Boolean);
+      if (parsed.length) G.topPicks = parsed;
+    }
+
+    // Embed into the .md if the model did not already write the section itself
+    if (G.topPicks && G.topPicks.length > 0 && !/##\s*TOP RECOMMENDATIONS/i.test(G.masterSource)) {
+      const picksMd = '\n\n## TOP RECOMMENDATIONS\n\n' +
+        G.topPicks.map((p, i) => `${i + 1}. **${p.name}** â€” ${p.reason}\n   ${p.url}`).join('\n\n') +
+        '\n';
+      const firstBreak = G.masterSource.indexOf('\n## ');
+      G.masterSource = firstBreak > -1
+        ? G.masterSource.slice(0, firstBreak) + picksMd + G.masterSource.slice(firstBreak)
+        : G.masterSource + picksMd;
+    }
+
+    if (!G.topPicks || G.topPicks.length === 0) {
+      console.warn('Refine finished without a TOP_PICKS block.');
+    }
+
     localStorage.removeItem('cf_checkpoint');
     logRunToFirestore('refine');
 
