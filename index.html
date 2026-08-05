@@ -1348,6 +1348,27 @@ HORIZONTAL: Run scan queries to find new entrants, discontinued products, new ca
 
 RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anything unverified
 
+BRAND LINE-UP COMPLETENESS — MANDATORY, DO NOT SKIP.
+Category-level searches surface a brand's best-known model and hide the rest of its
+range. That is how a guide ends up recommending a model the buyer later discovers was
+not the best one that brand sells. So, before you rank anything:
+
+1. Build the shortlist of brands that look strong from your category searches.
+2. For EVERY brand on that shortlist, run at least one dedicated search that enumerates
+   that brand's CURRENT model line — e.g. "[brand] all models [current year]",
+   "[brand] [category] lineup comparison", or the brand's own product/collection page.
+   Check the brand's own site and its storefront listing page, not just the single
+   product page you already found.
+3. Add EVERY current model you find from those brands to Section 5, including models
+   that lose to their siblings. State plainly which sibling wins and why.
+4. If a brand publishes models you cannot verify specs for, list them anyway and mark
+   them unverified. Silence is worse than an incomplete entry.
+5. Record each line-up query in the Section 2 discovery log so the next update can see
+   the range was checked.
+
+A guide that names the right brand but misses the model in that brand's range which
+best fits the stated requirements has failed, no matter how good the rest of it is.
+
 After the MASTER_SOURCE markers, output your top 5 recommendations in this exact format:
 
 TOP_PICKS_START
@@ -1375,8 +1396,11 @@ Your job:
    The updated file must contain at least as much detail as the one you were given.
 6. Output the complete updated MASTER_SOURCE between the standard markers
 7. AFTER the MASTER_SOURCE markers you MUST also output the TOP_PICKS block, in exactly the
-   same format as a full run. This is mandatory on every refine â€” a refine that omits it has
+   same format as a full run. This is mandatory on every refine — a refine that omits it has
    failed. Re-rank the top 5 taking the refinement request into account.
+8. Apply the BRAND LINE-UP COMPLETENESS rule above to any brand that enters or stays in the
+   top 5 as a result of this refine. If that brand's full current range was never enumerated
+   in the original run, enumerate it now and add the missing models to Section 5.
 
 ===MASTER_SOURCE_START===
 [full updated MASTER_SOURCE here]
@@ -1622,8 +1646,9 @@ async function runStream(phase, attempt = 0) {
           outputTokens = ev.usage?.output_tokens || 0;
         }
 
-        if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use'
-            && ev.content_block.name === 'web_search') {
+        if (ev.type === 'content_block_start'
+            && (ev.content_block?.type === 'server_tool_use' || ev.content_block?.type === 'tool_use')
+            && ev.content_block?.name === 'web_search') {
           G.searchCount++;
           document.getElementById('search-ct').textContent = G.searchCount;
           if (phase === 'research')
@@ -2366,7 +2391,11 @@ async function runRefineStream(attempt = 0) {
         if (ev.type === 'message_start' && ev.message?.usage) inputTokens = ev.message.usage.input_tokens || 0;
         if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') fullText += ev.delta.text;
         if (ev.type === 'message_delta') { stopReason = ev.delta?.stop_reason; outputTokens = ev.usage?.output_tokens || 0; }
-        if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use' && ev.content_block.name === 'web_search') {
+        // The hosted web-search tool arrives as `server_tool_use`, not `tool_use`.
+        // Matching only `tool_use` is why refine runs reported "Searches run: 0".
+        if (ev.type === 'content_block_start'
+            && (ev.content_block?.type === 'server_tool_use' || ev.content_block?.type === 'tool_use')
+            && ev.content_block?.name === 'web_search') {
           G.searchCount++;
           document.getElementById('refine-search-ct').textContent = G.searchCount;
           setRefineProgress(Math.min(15 + G.searchCount * 4, 84), `Searching… (${G.searchCount} done)`);
