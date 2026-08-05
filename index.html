@@ -18,47 +18,76 @@
 
   <!-- GUIDE VIEWER styles (added 2026-08-04) -->
   <style id="gv-style">
+  /* GUIDE VIEWER — a light printed document inside a dark app.
+     The app theme must not bleed in, so colours and fonts are forced. */
   #gv-bar{display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1.25rem;}
   #gv-status{font-family:var(--ff-mono);font-size:0.82rem;color:var(--text-faint);}
-  #gv-page{background:#fff;color:#1a1a1a;border-radius:var(--r);padding:3rem 3.4rem;
-    font:16px/1.62 "Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif;}
-  #gv-page h1{font-size:1.95rem;line-height:1.24;margin:0 0 .35rem;color:#12181d;letter-spacing:-.3px;}
-  #gv-page h2{font-size:1.32rem;margin:2.2rem 0 .7rem;padding-bottom:.4rem;border-bottom:2px solid #0b6b5b;color:#12181d;}
-  #gv-page h3{font-size:1.08rem;margin:1.5rem 0 .5rem;color:#22303c;}
-  #gv-page h4{font-size:.98rem;margin:1.1rem 0 .4rem;color:#22303c;}
+
+  #gv-page{background:#ffffff !important;border-radius:var(--r);
+    padding:3rem 3.6rem;max-width:none;width:100%;
+    box-shadow:0 2px 18px rgba(0,0,0,.35);}
+
+  /* Reset every inherited app colour and font inside the document */
+  #gv-page,#gv-page *{
+    color:#14181c !important;
+    background-color:transparent !important;
+    font-family:"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif !important;
+    text-shadow:none !important;
+  }
+  #gv-page{font-size:16px;line-height:1.62;}
+
+  #gv-page h1{font-size:2rem;line-height:1.24;margin:0 0 .35rem;letter-spacing:-.3px;font-weight:700;}
+  #gv-page h2{font-size:1.34rem;margin:2.2rem 0 .7rem;padding-bottom:.4rem;
+    border-bottom:2px solid #0b6b5b;font-weight:700;}
+  #gv-page h3{font-size:1.1rem;margin:1.55rem 0 .5rem;font-weight:700;}
+  #gv-page h4{font-size:1rem;margin:1.15rem 0 .4rem;font-weight:700;}
   #gv-page p{margin:0 0 .75rem;}
-  #gv-page ul,#gv-page ol{margin:0 0 .85rem;padding-left:1.4rem;}
+  #gv-page ul,#gv-page ol{margin:0 0 .85rem;padding-left:1.5rem;}
   #gv-page li{margin:0 0 .35rem;}
-  #gv-page a{color:#0a5ea8;}
-  #gv-page hr{border:0;border-top:1px solid #dfe3e8;margin:1.8rem 0;}
-  #gv-page blockquote{margin:0 0 .85rem;padding:.5rem .9rem;border-left:3px solid #dfe3e8;
-    color:#5c6470;background:#fafbfc;}
-  #gv-page code{background:#f2f4f6;padding:1px 5px;border-radius:3px;font-size:.92em;color:#1a1a1a;}
-  #gv-page .gv-sub{color:#5c6470;font-size:.95rem;margin:0 0 .2rem;}
-  #gv-page .gv-meta{color:#5c6470;font-size:.82rem;margin:0 0 1.9rem;font-family:var(--ff-mono);}
-  #gv-page table{border-collapse:collapse;width:100%;margin:0 0 1.1rem;font-size:.87rem;}
-  #gv-page th,#gv-page td{border:1px solid #dfe3e8;padding:.5rem .6rem;text-align:left;vertical-align:top;}
-  #gv-page th{background:#e8f3f0;font-weight:600;}
-  #gv-page tbody tr:nth-child(even){background:#fafbfc;}
-  #gv-page .gv-badge{display:inline-block;font-size:.68rem;font-weight:700;letter-spacing:.5px;
-    padding:2px 8px;border-radius:11px;white-space:nowrap;border:1px solid transparent;vertical-align:middle;}
-  #gv-page .gv-badge.exact{color:#0b6b5b;background:#e6f4f0;border-color:#bcded4;}
-  #gv-page .gv-badge.most{color:#8a5a00;background:#fdf3e0;border-color:#f0dcb4;}
-  #gv-page .gv-badge.min{color:#7a2e2e;background:#fbeaea;border-color:#eecccc;}
+  #gv-page strong,#gv-page strong *{font-weight:700 !important;}
+  #gv-page em{font-style:italic;}
+  #gv-page a,#gv-page a *{color:#0a5ea8 !important;text-decoration:underline;}
+  #gv-page hr{border:0;border-top:1px solid #d7dce1;margin:1.9rem 0;}
+  #gv-page blockquote{margin:0 0 .9rem;padding:.55rem .95rem;
+    border-left:3px solid #0b6b5b;background-color:#f5f8f7 !important;}
+  #gv-page blockquote *{background-color:transparent !important;}
+  #gv-page code,#gv-page code *{
+    font-family:Consolas,"Courier New",monospace !important;
+    background-color:#eef1f4 !important;padding:1px 5px;border-radius:3px;font-size:.92em;}
+
+  #gv-page .gv-sub{color:#4a545e !important;font-size:.95rem;margin:0 0 .2rem;}
+  #gv-page .gv-meta{color:#4a545e !important;font-size:.82rem;margin:0 0 2rem;}
+
+  /* Tables — explicit backgrounds so no app row styling shows through */
+  #gv-page table{border-collapse:collapse;width:100%;margin:0 0 1.15rem;font-size:.88rem;}
+  #gv-page th,#gv-page td{border:1px solid #cfd6dc;padding:.55rem .65rem;
+    text-align:left;vertical-align:top;background-color:#ffffff !important;}
+  #gv-page thead th,#gv-page thead th *{background-color:#e6f2ef !important;font-weight:700 !important;}
+  #gv-page tbody tr:nth-child(even) td{background-color:#f7f9fa !important;}
+  #gv-page table *{color:#14181c !important;}
+
+  /* Tier badges keep their own colours */
+  #gv-page .gv-badge{display:inline-block;font-size:.68rem;font-weight:700 !important;
+    letter-spacing:.5px;padding:2px 9px;border-radius:11px;white-space:nowrap;
+    border:1px solid transparent;vertical-align:middle;}
+  #gv-page .gv-badge.exact{color:#075c4d !important;background-color:#dff0ea !important;border-color:#a9d3c6;}
+  #gv-page .gv-badge.most{color:#7a4e00 !important;background-color:#fbeed5 !important;border-color:#e6cd9a;}
+  #gv-page .gv-badge.min{color:#6e2626 !important;background-color:#f8e0e0 !important;border-color:#e2b8b8;}
+
   @media print{
     @page{size:Letter;margin:.75in;}
-    body{background:#fff!important;}
-    header,nav,#gv-bar,.hdr-btn,#auth-status{display:none!important;}
-    .screen{display:none!important;}
-    .screen#scr-guideview{display:block!important;}
-    main,main.wide{max-width:none!important;width:auto!important;padding:0!important;margin:0!important;}
-    #gv-page{padding:0!important;border-radius:0!important;background:#fff!important;}
+    body{background:#fff !important;}
+    header,nav,#gv-bar,.hdr-btn,#auth-status,#cost-hud,.cost-hud{display:none !important;}
+    .screen{display:none !important;}
+    .screen#scr-guideview{display:block !important;}
+    main,main.wide{max-width:none !important;width:auto !important;padding:0 !important;margin:0 !important;}
+    #gv-page{padding:0 !important;border-radius:0 !important;box-shadow:none !important;}
     #gv-page h2,#gv-page h3,#gv-page h4{page-break-after:avoid;break-after:avoid;}
     #gv-page tr{page-break-inside:avoid;break-inside:avoid;}
     #gv-page thead{display:table-header-group;}
-    #gv-page a{color:#0a5ea8;text-decoration:underline;}
-    #gv-page a[href^="http"]::after{content:" (" attr(href) ")";font-size:9px;color:#666;word-break:break-all;}
+    #gv-page a[href^="http"]::after{content:" (" attr(href) ")";font-size:9px;color:#666 !important;word-break:break-all;}
   }
+
   </style>
   <!-- Firebase -->
   <script type="module">
@@ -1341,7 +1370,7 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('scr-' + id).classList.add('active');
   const mainEl = document.querySelector('main');
-  if (mainEl) mainEl.classList.toggle('wide', id === 'dashboard' || id === 'guides' || id === 'prefs');
+  if (mainEl) mainEl.classList.toggle('wide', id === 'dashboard' || id === 'guides' || id === 'prefs' || id === 'guideview');
   document.getElementById('dash-btn').classList.toggle('active', id === 'dashboard');
   const gb = document.getElementById('guides-btn');
   if (gb) gb.classList.toggle('active', id === 'guides');
