@@ -16,6 +16,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/pdfmake.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.10/vfs_fonts.js"></script>
+  <script src="https://apis.google.com/js/api.js"></script>
   
 
   <!-- GUIDE VIEWER styles (added 2026-08-04) -->
@@ -1091,6 +1092,12 @@
         <p style="font-family:var(--ff-mono);font-size:0.87rem;color:var(--text-dim)">Saved to your Google Drive · Available on any device</p>
       </div>
       <button class="btn btn-ghost" onclick="loadMyGuides()">↺ Refresh</button>
+    </div>
+
+    <div style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);display:flex;gap:0.9rem;align-items:center;flex-wrap:wrap;">
+      <span id="save-location" style="font-family:var(--ff-mono);font-size:0.85rem;color:var(--text-dim);"></span>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="chooseSaveFolder()" style="margin-top:0;font-size:0.85rem;padding:0.45rem 0.9rem;">Change save folder…</button>
     </div>
 
     <div id="guides-import-row" style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);">
@@ -2977,6 +2984,27 @@ const GOOGLE_CLIENT_ID = '168355939250-j7tqgauhiqahfq4rhls7jin4087gjd40.apps.goo
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 const REPORTS_FOLDER_NAME = 'Clarity Factory Reports';
 
+/* Google Drive folder picker.
+   drive.file only grants access to files the app created OR that the user hands
+   it explicitly. The Picker is that hand-over: the user browses their own Drive,
+   chooses one folder, and the app gains access to that folder and nothing else.
+   This is what lets guides be saved inside the user's own filing structure
+   without asking for full-Drive permission. Added 2026-08-05. */
+const PICKER_API_KEY = 'AIzaSyBc23vMXcTH5nLVHyIUXMXgbKsHiqj6mjY'; // referrer-locked to hookmeistr.github.io
+const PICKER_APP_ID  = '168355939250';
+const SAVE_FOLDER_KEY = 'cf_save_folder';   // localStorage: {id, name}
+
+function savedFolder() {
+  try { return JSON.parse(localStorage.getItem(SAVE_FOLDER_KEY) || 'null'); }
+  catch (e) { return null; }
+}
+function setSavedFolder(obj) {
+  try {
+    if (obj) localStorage.setItem(SAVE_FOLDER_KEY, JSON.stringify(obj));
+    else localStorage.removeItem(SAVE_FOLDER_KEY);
+  } catch (e) {}
+}
+
 let googleAuth = {
   ready: false,
   token: null,
@@ -3138,6 +3166,25 @@ async function ensureReportsFolder() {
 
 async function _ensureReportsFolderOnce() {
   try { await ensureToken(); } catch(e) { return null; }
+
+  // If the user has chosen a folder with the picker, that is the destination.
+  // Verify it still exists and is still reachable before trusting it.
+  const chosen = savedFolder();
+  if (chosen && chosen.id) {
+    try {
+      const chk = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${chosen.id}?fields=id,name,trashed`,
+        { headers: { Authorization: 'Bearer ' + googleAuth.token } }
+      );
+      if (chk.ok) {
+        const info = await chk.json();
+        if (!info.trashed) { googleAuth.folderId = info.id; return info.id; }
+      }
+      // Gone, trashed, or access lost - forget it and fall through to the default.
+      setSavedFolder(null);
+    } catch (e) { console.warn('saved folder check failed', e); }
+  }
+
   try {
     const q = encodeURIComponent(`name='${REPORTS_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
     // orderBy createdTime so that if duplicates already exist we always converge on
@@ -3169,6 +3216,74 @@ async function _ensureReportsFolderOnce() {
 const _topicFolderCache = {};
 const _topicFolderInFlight = {};
 
+/* ---------- Folder picker ---------- */
+
+let _pickerLoaded = false;
+function loadPicker() {
+  return new Promise((resolve, reject) => {
+    if (_pickerLoaded && window.google && google.picker) return resolve();
+    if (!window.gapi) return reject(new Error('Google API script did not load'));
+    gapi.load('picker', {
+      callback: () => { _pickerLoaded = true; resolve(); },
+      onerror: () => reject(new Error('Picker failed to load'))
+    });
+  });
+}
+
+async function chooseSaveFolder() {
+  if (!googleAuth.token) { alert('Sign in with Google first.'); return; }
+  try {
+    await ensureToken();
+    await loadPicker();
+  } catch (e) {
+    alert('Could not open the Drive folder chooser: ' + e.message);
+    return;
+  }
+
+  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(true)
+    .setMimeTypes('application/vnd.google-apps.folder');
+
+  const picker = new google.picker.PickerBuilder()
+    .setTitle('Choose where The Clarity Factory saves your guides')
+    .setOAuthToken(googleAuth.token)
+    .setDeveloperKey(PICKER_API_KEY)
+    .setAppId(PICKER_APP_ID)
+    .addView(view)
+    .setCallback(data => {
+      if (data.action !== google.picker.Action.PICKED) return;
+      const doc = data.docs && data.docs[0];
+      if (!doc) return;
+      setSavedFolder({ id: doc.id, name: doc.name });
+      googleAuth.folderId = doc.id;
+      Object.keys(_topicFolderCache).forEach(k => delete _topicFolderCache[k]);
+      renderSaveLocation();
+      alert('Guides will now be saved to: ' + doc.name +
+            '\n\nEach research topic gets its own subfolder inside it.');
+    })
+    .build();
+
+  picker.setVisible(true);
+}
+
+function renderSaveLocation() {
+  const el = document.getElementById('save-location');
+  if (!el) return;
+  const f = savedFolder();
+  el.textContent = f ? ('Saving to: ' + f.name)
+                     : ('Saving to: ' + REPORTS_FOLDER_NAME + ' (created by this app)');
+}
+
+/* Loose matching so "Coffee Whisk" reuses an existing "Coffee Whisks" folder
+   instead of creating a near-duplicate beside it. */
+function folderKey(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .replace(/s$/, '');
+}
+
 function topicFolderName(topic) {
   return String(topic || 'Untitled')
     .replace(/[\\/:*?"<>|]/g, ' ')
@@ -3187,16 +3302,19 @@ async function ensureTopicFolder(topic) {
 
   _topicFolderInFlight[name] = (async () => {
     try {
-      const safe = name.replace(/'/g, "\\'");
+      // List the subfolders we can see and match loosely, so an existing
+      // "Coffee Whisks" is reused for topic "Coffee Whisk".
       const q = encodeURIComponent(
-        `name='${safe}' and mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`
+        `mimeType='application/vnd.google-apps.folder' and trashed=false and '${parent}' in parents`
       );
       const res = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime&fields=files(id,name)`,
+        `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=createdTime&fields=files(id,name)&pageSize=200`,
         { headers: { Authorization: 'Bearer ' + googleAuth.token } }
       );
       const data = await res.json();
-      let id = (data.files && data.files.length) ? data.files[0].id : null;
+      const want = folderKey(name);
+      const hit = (data.files || []).find(f => folderKey(f.name) === want);
+      let id = hit ? hit.id : null;
       if (!id) {
         const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
           method: 'POST',
@@ -3758,6 +3876,7 @@ ${css.replace(/#gv-page\s?/g,'body ').replace(/\.screen[^{]*{[^}]*}/g,'')}</styl
 }
 
 async function showGuides() {
+  renderSaveLocation();
   showScreen('guides');
   try { await ensureToken(); } catch(e) {}
   loadMyGuides();
