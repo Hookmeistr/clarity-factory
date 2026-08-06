@@ -3243,6 +3243,8 @@ async function chooseSaveFolder() {
   const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
     .setIncludeFolders(true)
     .setSelectFolderEnabled(true)
+    .setParent('root')
+    .setMode(google.picker.DocsViewMode.LIST)
     .setMimeTypes('application/vnd.google-apps.folder');
 
   const picker = new google.picker.PickerBuilder()
