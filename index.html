@@ -110,12 +110,12 @@
       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
     const firebaseConfig = {
-      apiKey: "AIzaSyApwbUUT_XeixGvxCduZ8iBkt7tdwvXdvQ",
-      authDomain: "triplog-6b5ab.firebaseapp.com",
-      projectId: "triplog-6b5ab",
-      storageBucket: "triplog-6b5ab.firebasestorage.app",
-      messagingSenderId: "895721792752",
-      appId: "1:895721792752:web:8738716cbe13ded3130e35"
+      apiKey: "AIzaSyCA0FhZfX_gW2Uy03wSdyYEhpgyeKobAXo",
+      authDomain: "clarity-factory-prod.firebaseapp.com",
+      projectId: "clarity-factory-prod",
+      storageBucket: "clarity-factory-prod.firebasestorage.app",
+      messagingSenderId: "519236312657",
+      appId: "1:519236312657:web:406f6d0eb49618b9f72270"
     };
 
     const app  = initializeApp(firebaseConfig);
@@ -1463,6 +1463,8 @@ const BUDGET_STOP_AT      = BUDGET_MONTHLY_CAP;        // hard stop at the cap i
 async function monthlySpendSoFar() {
   try {
     if (!window._db || !window._fsGetDocs || !window._fsCollection) return 0;
+    // owner guard: the monthly API cap belongs to the owner, and non-owners must never read owner run history
+    if (!isOwnerUser()) return 0;
     const snap = await window._fsGetDocs(window._fsCollection(window._db, COLLECTION));
     const month = new Date().toISOString().slice(0, 7);
     let total = 0;
