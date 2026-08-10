@@ -957,17 +957,20 @@
 
     <div id="complete-stats"></div>
 
+    <div id="refine-integrity" style="display:none"></div>
+
     <div class="dl-section">
       <h3>Your Deliverable</h3>
       <div class="dl-buttons">
         <button class="btn btn-dl" onclick="showGuideView()">Open Guide (print / PDF / Word)</button>
-        <button class="btn btn-dl" onclick="dlMarkdown()">📄 Download MASTER_SOURCE.md (for re-runs)</button>
+        <button class="btn btn-dl" onclick="dlMarkdown()">📄 Download MASTER_SOURCE.md (optional copy)</button>
       </div>
       <div id="drive-save-status" style="display:none;font-family:var(--ff-mono);font-size:0.84rem;margin-top:0.85rem;padding:0.55rem 0.8rem;border-radius:3px;"></div>
       <p style="font-size:0.89rem;color:var(--text-faint);margin-top:0.85rem;line-height:1.6">
         <strong style="color:var(--text-dim)">Open Guide</strong> shows the finished report on screen, where you can save it as a PDF, download it as Word (.docx), or download it as HTML.<br><br>
-        <strong style="color:var(--text-dim)">The .md file</strong> is the source of truth — keep it if you want to re-run or update this guide later.<br><br>
-        <strong style="color:var(--text-dim)">Quarterly updates:</strong> Re-upload the .md and run UPDATE_RUNNER_PROMPT. Next update due in 3 months.
+        <strong style="color:var(--text-dim)">You do not need to download anything.</strong> This guide is already saved to your Google Drive, and it is already in <strong style="color:var(--text-dim)">My Guides</strong>. To update it later, open My Guides and click <strong style="color:var(--text-dim)">Re-run with edits</strong> — no upload, no file handling.<br><br>
+        <strong style="color:var(--text-dim)">The .md download</strong> is an optional spare copy for your own records, or for opening the guide in another tool. Nothing in this app requires it.<br><br>
+        <strong style="color:var(--text-dim)">Quarterly updates:</strong> next update due in 3 months — use My Guides → Re-run with edits.
       </p>
     </div>
 
@@ -1316,7 +1319,7 @@ Output the complete MASTER_SOURCE EXACTLY between these markers:
 | Scope | [brief scope] |
 | Edition | Living document |
 | Last FULL update | [today YYYY-MM-DD] |
-| Last update model | [leave this exactly as: PENDING â€” the app fills it in] |
+| Last update model | MODEL_PENDING |
 | Next scheduled update | [+3 months] |
 | Update cadence | Quarterly |
 
@@ -1349,7 +1352,7 @@ HORIZONTAL: Run scan queries to find new entrants, discontinued products, new ca
 [5–8 numbered trends]
 
 ## 8. CHANGELOG
-### [Today] — Initial build (Claude Sonnet 4.6)
+### [Today] — Initial build (MODEL_PENDING)
 - [Key findings]
 ===MASTER_SOURCE_END===
 
@@ -1373,20 +1376,50 @@ not the best one that brand sells. So, before you rank anything:
 5. Record each line-up query in the Section 2 discovery log so the next update can see
    the range was checked.
 
+RETAILER SWEEP — MANDATORY, DO NOT SKIP. The rule above makes a brand's range complete;
+this rule makes the BRAND LIST complete. Category searches surface the brands with the
+best SEO, not the best products, and entire brands get missed that way.
+
+6. Before ranking, run a dedicated search against EACH major retailer that plausibly sells
+   this category, asking what that retailer stocks — e.g. "[retailer] [category]".
+   For US consumer goods that list is normally: Amazon, Walmart, Home Depot, Lowe's, Target,
+   Costco, Sam's Club, Best Buy, Wayfair, and any category-specific chain that matters
+   (e.g. Tractor Supply, Menards, Ace Hardware for outdoor/hardware; REI for outdoor gear;
+   Sephora/Ulta for beauty). Use judgement about which apply to THIS category, and say in
+   the discovery log which retailers you swept and why you excluded any.
+7. Add EVERY brand you find that way to Section 4, including private-label and house brands,
+   and including brands you will end up ranking poorly. Then apply rule 2 above to each of
+   them so their model ranges are enumerated too.
+8. For each house/private-label brand, state how many SKUs in the category it actually has,
+   so a single-SKU house brand is not mistaken for a range.
+9. Record every retailer sweep query in the Section 2 discovery log.
+
 A guide that names the right brand but misses the model in that brand's range which
 best fits the stated requirements has failed, no matter how good the rest of it is.
+A guide that misses an entire brand carried by a major retailer has failed the same way.
 
 After the MASTER_SOURCE markers, output your top 5 recommendations in this exact format:
 
 TOP_PICKS_START
-1. [Product/Brand Name] | [TIER â€” one of MEETS EXACT CRITERIA / MEETS MOST CRITERIA / MEETS MINIMAL CRITERIA â€” followed by an em dash and a one-line reason, plus any hard requirement it misses] | [Best URL — brand product page, Amazon, or top retailer found during research]
+1. [Product/Brand Name] | [TIER — one of MEETS EXACT CRITERIA / MEETS MOST CRITERIA / MEETS MINIMAL CRITERIA — followed by an em dash and a one-line reason, plus any hard requirement it misses] | [Best URL — brand product page, Amazon, or top retailer found during research]
 2. [Product/Brand Name] | [One-line reason] | [URL]
 3. [Product/Brand Name] | [One-line reason] | [URL]
 4. [Product/Brand Name] | [One-line reason] | [URL]
 5. [Product/Brand Name] | [One-line reason] | [URL]
 TOP_PICKS_END
 
-URL rules: Use actual URLs confirmed during your research. Never fabricate a URL. If no specific page was confirmed for a product, use https://www.google.com/search?q=[URL-encoded+product+name].
+URL rules — a recommendation with a bad link has failed, no matter how good the writing is:
+1. Use a DIRECT PRODUCT PAGE URL confirmed during your research — the page for that exact
+   model on the brand's own site or on a retailer that sells it.
+2. NEVER use a retailer SEARCH-RESULTS URL. Anything containing /s?, /search, ?q=, ?keyword=,
+   ?searchTerm= or a query string of search words is forbidden for a top pick. If the only
+   thing you found was a search page, go back and open a result from it and use that page.
+3. URL-encode ONCE and only once. Never emit %2520, %253A or any other double-encoded
+   sequence — that is a broken link. Prefer a plain unencoded URL where one exists.
+4. Never fabricate, guess, or pattern-match a URL from another product's URL.
+5. If, after genuinely trying, no direct product page can be confirmed for a product, do not
+   give a search link — instead write NO_VERIFIED_URL as the URL and say in the reason line
+   that the product page could not be confirmed. An honest gap beats a broken link.
 
 ━━━ [PHASE:REFINE] ━━━
 The user has an existing MASTER_SOURCE and wants to add or change specific variables without redoing the full research.
@@ -1398,9 +1431,27 @@ Your job:
 2. Integrate the new information into the existing MASTER_SOURCE
 3. Do NOT re-research anything already covered — only fill in what is missing
 4. Add a dated changelog entry describing exactly what was added
-5. PRESERVE EVERYTHING already in the MASTER_SOURCE. A refine ADDS and UPDATES; it must never
-   summarise, condense, or drop existing products, brands, criteria, trends, or changelog entries.
+5. PRESERVE EVERYTHING already in the MASTER_SOURCE. This instruction has been violated
+   before by models that believed they were complying, so it is now mechanical rather than
+   a matter of judgement. Follow this procedure literally:
+   a. Do NOT rewrite the MASTER_SOURCE from scratch. Start from the exact text you were
+      given and make targeted insertions and edits into it.
+   b. Copy every existing bullet, table row, numbered item and changelog line through
+      VERBATIM unless the refinement request specifically requires that line to change.
+      Shortening a line you were not asked to change is a violation.
+   c. Section 8 CHANGELOG is an append-only audit trail. Never edit, shorten, merge or
+      re-word an EXISTING dated changelog entry. Add a new dated entry only.
+   d. Every section must end with at least as many entries as it started with. If your
+      new material makes an old entry look redundant, keep the old entry and add a note
+      explaining the change — do not delete it.
+   e. Before you output, count the entries in each section of the source you were given
+      and the same section of your output. If any section has fewer, you have failed
+      this rule — go back and restore what you dropped.
+   f. If the refinement genuinely requires REMOVING something, do not silently delete it.
+      Keep it and mark it SUPERSEDED with a one-line reason.
    The updated file must contain at least as much detail as the one you were given.
+   The app independently verifies this after you finish and will report any losses to the
+   user by name, so a quiet deletion will be caught and shown.
 6. Output the complete updated MASTER_SOURCE between the standard markers
 7. AFTER the MASTER_SOURCE markers you MUST also output the TOP_PICKS block, in exactly the
    same format as a full run. This is mandatory on every refine — a refine that omits it has
@@ -1917,10 +1968,95 @@ function stampModelName(md) {
            .replace(/\b\w/g, c => c.toUpperCase())
     : 'Claude Sonnet 5';
   const eff = (typeof EFFORT === 'string' && EFFORT) ? ` (effort: ${EFFORT})` : '';
-  return md.replace(/^(\|\s*Last update model\s*\|).*$/mi, `$1 ${pretty}${eff} |`);
+  let out = md.replace(/^(\|\s*Last update model\s*\|).*$/mi, `$1 ${pretty}${eff} |`);
+  // The model used to invent a version number in the changelog heading. Stamp it here
+  // from the same variable that feeds the metadata table so the two can never disagree.
+  out = out.replace(/MODEL_PENDING/g, `${pretty}${eff}`);
+  out = out.replace(/^(###[^\n]*?)\((?:Claude|claude)[^)\n]*\)/gm, `$1(${pretty}${eff})`);
+  // Repair double-encoded UTF-8 that has historically leaked in from patch tooling.
+  out = out.replace(/â€”/g, '—').replace(/â€“/g, '–').replace(/â€™/g, '’').replace(/â€œ/g, '“').replace(/â€/g, '”');
+  return out;
+}
+
+// ═══════════════════════════════════════════
+// REFINE PRESERVATION AUDIT
+// A refine must ADD to the master, never shrink it. The prompt says so, but a model can
+// comply in spirit and still drop content while rebuilding a section. This checks the
+// actual before/after text and reports losses by name instead of trusting the model.
+// Returns an array of human-readable problems, or null if the refine was clean.
+// ═══════════════════════════════════════════
+function auditRefinePreservation(prev, next) {
+  try {
+    if (!prev || !next || prev.length < 200) return null;
+    const splitSections = s => {
+      const map = {};
+      s.split(/\n(?=##\s)/).forEach(part => {
+        const h = (part.match(/^##\s*([^\n]+)/) || [])[1];
+        if (h) map[h.trim()] = part;
+      });
+      return map;
+    };
+    const countEntries = t => (t.match(/^\s*(?:[-*]\s+\S|\d+\.\s+\S|\|\s*[^-|\s])/gm) || []).length;
+    const A = splitSections(prev), B = splitSections(next);
+    const problems = [];
+
+    Object.keys(A).forEach(h => {
+      if (!B[h]) { problems.push('Section removed entirely: "' + h + '"'); return; }
+      const a = countEntries(A[h]), b = countEntries(B[h]);
+      if (b < a) problems.push('Section "' + h + '": ' + a + ' entries before, ' + b + ' after — ' + (a - b) + ' lost');
+    });
+
+    const boldNames = t => (t.match(/\*\*([^*\n]{3,90})\*\*/g) || [])
+      .map(x => x.replace(/\*\*/g, '').trim())
+      .filter(x => x.length > 3);
+    const seen = {};
+    const missing = boldNames(prev).filter(n => {
+      if (seen[n]) return false;
+      seen[n] = 1;
+      return next.indexOf(n) === -1;
+    });
+    if (missing.length) {
+      problems.push('Named entries no longer present: ' + missing.slice(0, 15).join(' · ') +
+        (missing.length > 15 ? ' (+' + (missing.length - 15) + ' more)' : ''));
+    }
+    return problems.length ? problems : null;
+  } catch (e) {
+    return ['Preservation audit could not run: ' + (e && e.message ? e.message : String(e))];
+  }
+}
+
+function renderRefineIntegrity(problems) {
+  const el = document.getElementById('refine-integrity');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.fontFamily = 'var(--ff-mono)';
+  el.style.fontSize = '0.84rem';
+  el.style.lineHeight = '1.55';
+  el.style.margin = '1rem 0';
+  el.style.padding = '0.7rem 0.9rem';
+  el.style.borderRadius = '3px';
+  if (!problems) {
+    el.style.background = 'rgba(40,130,70,0.14)';
+    el.style.border = '1px solid rgba(80,190,120,0.55)';
+    el.style.color = '#7fdca0';
+    el.textContent = '✓ Preservation check passed — nothing from the previous version was lost.';
+    return;
+  }
+  el.style.background = 'rgba(150,40,40,0.16)';
+  el.style.border = '1px solid rgba(230,90,90,0.65)';
+  el.style.color = '#ff9a9a';
+  el.innerHTML = '<strong>⚠ REFINE LOST CONTENT — this guide is incomplete.</strong><br>' +
+    'The refine dropped material that was in the previous version. Your previous file is still ' +
+    'in Drive and was not overwritten. Details:<ul style="margin:0.5rem 0 0 1.1rem;padding:0">' +
+    problems.map(p => '<li style="margin-bottom:0.3rem">' + String(p).replace(/[<>]/g, '') + '</li>').join('') +
+    '</ul>';
 }
 
 function parseResearch(text) {
+  // A fresh full run has no previous version to lose, so clear any refine banner.
+  const _ri = document.getElementById('refine-integrity');
+  if (_ri) { _ri.style.display = 'none'; _ri.innerHTML = ''; }
+  G.refineLosses = null;
   const match = text.match(/===MASTER_SOURCE_START===([\s\S]*?)===MASTER_SOURCE_END===/);
 
   if (!match) {
@@ -2484,7 +2620,19 @@ async function runRefineStream(attempt = 0) {
       return;
     }
 
+    // Snapshot the master we were given BEFORE overwriting it, so the preservation
+    // audit compares the real before/after rather than trusting the model's word.
+    const prevMasterForAudit = G.masterSource || '';
     G.masterSource = stampModelName(match[1].trim());
+    G.refineLosses = auditRefinePreservation(prevMasterForAudit, G.masterSource);
+    if (G.refineLosses) {
+      G.masterSource += '\n\n## ⚠ REFINE INTEGRITY WARNING — ' + new Date().toISOString().slice(0, 10) + '\n' +
+        'The automated preservation check found that this refine pass dropped content that was\n' +
+        'present in the previous version of this file. This guide should be treated as incomplete\n' +
+        'until the missing material is restored. The previous version was NOT overwritten.\n\n' +
+        G.refineLosses.map(p => '- ' + p).join('\n') + '\n';
+    }
+    renderRefineIntegrity(G.refineLosses);
 
     // Re-parse the Top 5 on refine. Without this every re-run silently lost it.
     const rPicks = fullText.match(/TOP_PICKS_START\s*([\s\S]*?)\s*TOP_PICKS_END/);
@@ -2501,7 +2649,7 @@ async function runRefineStream(attempt = 0) {
     // Embed into the .md if the model did not already write the section itself
     if (G.topPicks && G.topPicks.length > 0 && !/##\s*TOP RECOMMENDATIONS/i.test(G.masterSource)) {
       const picksMd = '\n\n## TOP RECOMMENDATIONS\n\n' +
-        G.topPicks.map((p, i) => `${i + 1}. **${p.name}** â€” ${p.reason}\n   ${p.url}`).join('\n\n') +
+        G.topPicks.map((p, i) => `${i + 1}. **${p.name}** — ${p.reason}\n   ${p.url}`).join('\n\n') +
         '\n';
       const firstBreak = G.masterSource.indexOf('\n## ');
       G.masterSource = firstBreak > -1
@@ -3144,8 +3292,8 @@ function updateAuthUI(signedIn) {
   } else {
     box.classList.remove('signed-in');
     icon.textContent = '○';
-    label.textContent = 'Sign in';
-    box.title = 'Sign in to save your guides across devices';
+    label.textContent = 'Sign in with Google';
+    box.title = 'Click here to sign in with Google and save your guides across devices';
     if (nudge) nudge.style.display = 'block';
     const gb = document.getElementById('guides-btn'); if (gb) gb.style.display = 'none';
     const pb = document.getElementById('prefs-btn'); if (pb) pb.style.display = 'none';
