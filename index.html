@@ -1427,6 +1427,23 @@ A guide that names the right brand but misses the model in that brand's range wh
 best fits the stated requirements has failed, no matter how good the rest of it is.
 A guide that misses an entire brand carried by a major retailer has failed the same way.
 
+REQUIREMENT TIERS — how to rank:
+The brief may carry a REQUIREMENT TIERS block listing each requirement as ABSOLUTE, STRONG
+or NICE TO HAVE. Where it does, rank strictly by it.
+
+- A product that fails ANY absolute requirement cannot be a top pick, however well it
+  scores elsewhere. Name it and say plainly that it was disqualified and on which
+  requirement — do not drop it silently. If EVERY candidate fails an absolute, say so
+  outright rather than quietly relaxing the requirement to fill the list.
+- Strong requirements order the products that survived the absolutes. Missing one is a
+  serious mark against a product but never a disqualification on its own.
+- Nice-to-have requirements break ties between otherwise equal products. They are never a
+  reason to rank a product down by themselves.
+- The tier labels below follow directly from this: MEETS EXACT CRITERIA means every
+  absolute AND every strong requirement is met; MEETS MOST CRITERIA means all absolutes
+  and some strongs; MEETS MINIMAL CRITERIA means all absolutes but few strongs. A product
+  failing an absolute gets no label, because it is not in the list at all.
+
 After the MASTER_SOURCE markers, output your top 5 recommendations in this exact format:
 
 TOP_PICKS_START
@@ -1498,7 +1515,10 @@ Your job:
 10. Apply the BRAND LINE-UP COMPLETENESS and RETAILER SWEEP rules above to any brand that
     enters or stays in the top 5 as a result of this refine.
 
-The URL rules above apply in full to every link you emit.
+The URL rules above apply in full to every link you emit, and the REQUIREMENT TIERS
+ranking rules above apply in full to the re-ranked top 5. If the refinement request
+changes which tier a requirement sits in, re-rank under the new tiering and say so in the
+changelog bullets.
 
 Output in exactly this shape, and output nothing outside it:
 
@@ -1995,6 +2015,7 @@ async function runStream(phase, attempt = 0) {
     const dec = new TextDecoder();
     let buf = '', fullText = '', stopReason = null, inputTokens = 0, outputTokens = 0;
 
+    let wroteResearchLabel = false;
     const box = document.getElementById('stream-box');
     box.appendChild(cursorEl);
 
@@ -2018,6 +2039,12 @@ async function runStream(phase, attempt = 0) {
         if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
           fullText += ev.delta.text;
           appendStream(ev.delta.text, cursorEl);
+          // Register item Q, research side: same fix as the refine loop.
+          if (!wroteResearchLabel && phase === 'research') {
+            wroteResearchLabel = true;
+            setProgress(Math.min(15 + G.searchCount * 1.8 + 6, 92),
+              `Writing the guide… (${G.searchCount} searches done)`);
+          }
         }
 
         if (ev.type === 'message_delta') {
@@ -2253,7 +2280,13 @@ function stampModelName(md) {
   // The model used to invent a version number in the changelog heading. Stamp it here
   // from the same variable that feeds the metadata table so the two can never disagree.
   out = out.replace(/MODEL_PENDING/g, `${pretty}${eff}`);
-  out = out.replace(/^(###[^\n]*?)\((?:Claude|claude)[^)\n]*\)/gm, `$1(${pretty}${eff})`);
+  // REMOVED 2026-08-11 (register item S). A rule here used to rewrite the model name in
+  // EVERY dated changelog heading in the file, which retroactively restamped historical
+  // entries with the model running today — the changelog exists to be an accurate audit
+  // trail, so that was falsifying the one section that must not be. It also double-stamped
+  // the new entry, because the app already writes that heading with a MODEL_PENDING token
+  // which the line above replaces correctly. The app owns the heading now; nothing else
+  // needs stamping.
   // Repair double-encoded UTF-8 that has historically leaked in from patch tooling.
   out = out.replace(/â€”/g, '—').replace(/â€“/g, '–').replace(/â€™/g, '’').replace(/â€œ/g, '“').replace(/â€/g, '”');
   return out;
@@ -2950,6 +2983,7 @@ async function runRefineStream(attempt = 0) {
     const reader = resp.body.getReader();
     const dec = new TextDecoder();
     let buf = '', fullText = '', stopReason = null, inputTokens = 0, outputTokens = 0;
+    let wroteLabel = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -2963,7 +2997,17 @@ async function runRefineStream(attempt = 0) {
         if (raw === '[DONE]') continue;
         let ev; try { ev = JSON.parse(raw); } catch { continue; }
         if (ev.type === 'message_start' && ev.message?.usage) inputTokens = ev.message.usage.input_tokens || 0;
-        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') fullText += ev.delta.text;
+        if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+          fullText += ev.delta.text;
+          // Register item Q: the label used to sit on "Searching… (N done)" for the whole
+          // write-up, so a run that was working looked stuck. Flip it the moment prose
+          // starts arriving.
+          if (!wroteLabel) {
+            wroteLabel = true;
+            setRefineProgress(Math.min(15 + G.searchCount * 4 + 6, 92),
+              `Writing the updated sections… (${G.searchCount} searches done)`);
+          }
+        }
         if (ev.type === 'message_delta') { stopReason = ev.delta?.stop_reason; outputTokens = ev.usage?.output_tokens || 0; }
         // The hosted web-search tool arrives as `server_tool_use`, not `tool_use`.
         // Matching only `tool_use` is why refine runs reported "Searches run: 0".
@@ -3307,7 +3351,16 @@ DO:
 - Force the research to address things manufacturers do NOT publish, by naming the
   measurable proxies that should be reasoned from instead.
 - Convert vague wording into testable requirements.
-- Mark hard requirements (must-have) separately from preferences (nice-to-have).
+- Sort EVERY requirement into exactly three tiers and say which tier each one is in:
+    ABSOLUTE     - disqualifying. A product that fails this is out, however good it is otherwise.
+    STRONG       - heavily penalised if missed, but not disqualifying on its own.
+    NICE TO HAVE - a tie-breaker only, never a reason to reject a product.
+  End the brief with a "REQUIREMENT TIERS" heading listing them one per line, in the form
+  "ABSOLUTE: ...", "STRONG: ...", "NICE TO HAVE: ...".
+  If the buyer did not state the weighting, infer it from how they worded it and list that
+  inference in "additions" so they can correct it. Default to STRONG when genuinely
+  unclear. Never invent an ABSOLUTE the buyer did not clearly intend - an invented absolute
+  silently deletes products they might have wanted to see.
 - Instruct the research to say so plainly if a requirement eliminates all candidates,
   rather than quietly relaxing it.
 - Preserve every constraint the user gave, exactly.
