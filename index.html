@@ -906,6 +906,12 @@
       </div>
     </div>
 
+    <div id="stop-run-wrap" style="display:none;margin-top:0.6rem;">
+      <button class="btn btn-ghost" onclick="stopRun()"
+              style="margin-top:0;font-size:0.86rem;padding:0.4rem 0.9rem;">&#9632; Stop this run</button>
+      <span id="run-cost-live" style="font-family:var(--ff-mono);font-size:0.82rem;color:var(--text-faint);margin-left:0.7rem;"></span>
+    </div>
+
     <div class="stream-box" id="stream-box"></div>
 
     <div id="run-context-btn-wrap" style="display:none;margin-top:0.85rem;">
@@ -998,6 +1004,12 @@
         <span id="refine-prog-label">Running refinement…</span>
         <span class="searches">Searches: <span id="refine-search-ct">0</span></span>
       </div>
+    </div>
+
+    <div id="stop-refine-wrap" style="display:none;margin-top:0.6rem;">
+      <button class="btn btn-ghost" onclick="stopRun()"
+              style="margin-top:0;font-size:0.86rem;padding:0.4rem 0.9rem;">&#9632; Stop this run</button>
+      <span id="refine-cost-live" style="font-family:var(--ff-mono);font-size:0.82rem;color:var(--text-faint);margin-left:0.7rem;"></span>
     </div>
 
     <div class="refine-box" id="refine-input-box">
@@ -1187,7 +1199,7 @@
 <!-- TOKEN TRACKER -->
 <div id="tracker">
   <div id="tracker-hdr" onclick="toggleTracker()">
-    <span>💰 Session Cost</span>
+    <span>💰 This run</span>
     <span id="tracker-hdr-cost">$0.0000</span>
   </div>
   <div id="tracker-body">
@@ -1218,6 +1230,9 @@ let G = {
   callCount: 0,          // ← tracks consecutive API calls for pacing
   tokens: { in: 0, out: 0, calls: 0 },
   streaming: false,
+  rounds: 0,             // ← API round trips used by the current run (safety rail)
+  controller: null,      // ← AbortController for the in-flight request, so Stop really stops
+  cancelled: false,      // ← set by the Stop button
   prevScreen: 'topic',
   pendingContext: null   // ← context injected mid-run by user
 };
@@ -1232,6 +1247,20 @@ const INTRO_PRICING_ENDS = new Date('2026-09-01T00:00:00Z');
 const _introActive = Date.now() < INTRO_PRICING_ENDS.getTime();
 const PRICE_IN  = (_introActive ? 2  : 3)  / 1_000_000;
 const PRICE_OUT = (_introActive ? 10 : 15) / 1_000_000;
+
+/* ═══════════════════════════════════════════
+   RUN SAFETY RAILS (added 2026-08-11)
+   A run had no ceiling of any kind. Both streaming loops recursed on every
+   tool_use round AND again whenever the expected output markers were missing,
+   with no round counter, no spend check, and no way for the user to stop one.
+   A refine on 2026-08-10 reached $5.11, produced no output, and could only be
+   ended by closing the browser tab. These three limits are the fix; they are
+   deliberately separate from the monthly cap, which is a pre-flight check only.
+   ═══════════════════════════════════════════ */
+const MAX_ROUNDS_RESEARCH = 40;   // API round trips allowed within ONE research run
+const MAX_ROUNDS_REFINE   = 14;   // API round trips allowed within ONE refine run
+const RUN_COST_CEILING    = 1.50; // USD, hard stop for a SINGLE run
+
 const COLLECTION = 'clarity_factory_runs';
 const MONTHLY_COLLECTION = 'clarity_factory_monthly';
 // Only this account's runs are stored as individual rows. Everyone else's runs
@@ -1421,48 +1450,82 @@ URL rules — a recommendation with a bad link has failed, no matter how good th
    give a search link — instead write NO_VERIFIED_URL as the URL and say in the reason line
    that the product page could not be confirmed. An honest gap beats a broken link.
 
-━━━ [PHASE:REFINE] ━━━
-The user has an existing MASTER_SOURCE and wants to add or change specific variables without redoing the full research.
+━━━ [PHASE:SELECT] ━━━
+You are given a refinement request and an INDEX of the guide's sections. Reply with ONLY the
+headings of the sections whose full text must be read in order to make that change - one per
+line, copied exactly as they appear in the index. No commentary, no numbering, no blank
+explanation lines, nothing else.
 
-The existing MASTER_SOURCE and refinement request are included in the user message.
+Include a section if the change plausibly touches it. Err on the side of including one you
+are unsure about; leaving out a section that needed editing is the worse error. Do NOT list
+the CHANGELOG section or the TOP RECOMMENDATIONS section - the app maintains both of those
+itself and they are never edited by you.
+
+━━━ [PHASE:REFINE] ━━━
+The user has an existing guide and wants to add or change specific things in it without
+redoing the full research.
+
+YOU DO NOT HAVE THE WHOLE GUIDE AND YOU MUST NOT TRY TO REPRODUCE IT. You are given an index
+of every section, the full text of only the sections you may edit, and the current top 5.
+You return a PATCH. The app holds the guide and splices your patch into it.
+
+This matters, so it is worth being explicit: any section you do not return is carried across
+byte for byte. It cannot be lost, so there is no reason to copy it, and copying it wastes the
+user's money. An earlier version of this app asked the model to re-emit the entire document
+on every refine. That cost several dollars per run, took tens of minutes, and dropped content
+anyway. Returning only what changed is both cheaper and safer.
 
 Your job:
-1. Run 5–15 TARGETED searches covering ONLY the new variables the user specified
-2. Integrate the new information into the existing MASTER_SOURCE
-3. Do NOT re-research anything already covered — only fill in what is missing
-4. Add a dated changelog entry describing exactly what was added
-5. PRESERVE EVERYTHING already in the MASTER_SOURCE. This instruction has been violated
-   before by models that believed they were complying, so it is now mechanical rather than
-   a matter of judgement. Follow this procedure literally:
-   a. Do NOT rewrite the MASTER_SOURCE from scratch. Start from the exact text you were
-      given and make targeted insertions and edits into it.
-   b. Copy every existing bullet, table row, numbered item and changelog line through
-      VERBATIM unless the refinement request specifically requires that line to change.
-      Shortening a line you were not asked to change is a violation.
-   c. Section 8 CHANGELOG is an append-only audit trail. Never edit, shorten, merge or
-      re-word an EXISTING dated changelog entry. Add a new dated entry only.
-   d. Every section must end with at least as many entries as it started with. If your
-      new material makes an old entry look redundant, keep the old entry and add a note
-      explaining the change — do not delete it.
-   e. Before you output, count the entries in each section of the source you were given
-      and the same section of your output. If any section has fewer, you have failed
-      this rule — go back and restore what you dropped.
-   f. If the refinement genuinely requires REMOVING something, do not silently delete it.
-      Keep it and mark it SUPERSEDED with a one-line reason.
-   The updated file must contain at least as much detail as the one you were given.
-   The app independently verifies this after you finish and will report any losses to the
-   user by name, so a quiet deletion will be caught and shown.
-6. Output the complete updated MASTER_SOURCE between the standard markers
-7. AFTER the MASTER_SOURCE markers you MUST also output the TOP_PICKS block, in exactly the
-   same format as a full run. This is mandatory on every refine — a refine that omits it has
-   failed. Re-rank the top 5 taking the refinement request into account.
-8. Apply the BRAND LINE-UP COMPLETENESS rule above to any brand that enters or stays in the
-   top 5 as a result of this refine. If that brand's full current range was never enumerated
-   in the original run, enumerate it now and add the missing models to Section 5.
+1. Run 5-15 TARGETED searches covering ONLY what the refinement request asks for.
+2. Do NOT re-research anything already covered by the sections you were given.
+3. For every section you change, output the COMPLETE new text of that section, starting with
+   its "## " heading exactly as it appears in the index. A partial section is not accepted -
+   what you return REPLACES that section entirely.
+4. Never shrink a section you were not explicitly asked to shrink. Each section you return
+   must end with at least as many bullets, numbered items and table rows as the version you
+   were given. The app counts them and reports any shortfall to the user by name.
+5. If new information supersedes an existing entry, KEEP the existing entry and mark it
+   SUPERSEDED with a one-line reason. Never delete it.
+6. To add a genuinely new section, return it with a heading that does not appear in the
+   index. It will be inserted just before the changelog.
+7. Do NOT return the CHANGELOG section. Supply only the bullets for the new entry between the
+   CHANGELOG markers; the app dates it, titles it, stamps the model name and appends it. The
+   changelog is append-only and earlier entries are not yours to edit.
+8. Do NOT return a TOP RECOMMENDATIONS section. Supply the re-ranked top 5 between the
+   TOP_PICKS markers in the standard format; the app rebuilds that section from it.
+9. If you needed a section that was not supplied to you, name it in the NEEDS block rather
+   than guessing at its contents or quietly working around the gap.
+10. Apply the BRAND LINE-UP COMPLETENESS and RETAILER SWEEP rules above to any brand that
+    enters or stays in the top 5 as a result of this refine.
 
-===MASTER_SOURCE_START===
-[full updated MASTER_SOURCE here]
-===MASTER_SOURCE_END===`;
+The URL rules above apply in full to every link you emit.
+
+Output in exactly this shape, and output nothing outside it:
+
+===PATCH_START===
+<<<SECTION>>>
+## [exact heading of a section you are changing]
+[the complete new text of that section]
+<<<SECTION>>>
+## [exact heading of another section you are changing]
+[the complete new text of that section]
+===PATCH_END===
+
+CHANGELOG_START
+- [one bullet per change, in the same style as the existing changelog entries]
+CHANGELOG_END
+
+NEEDS_START
+[headings of any further sections you needed and were not given, one per line; empty if none]
+NEEDS_END
+
+TOP_PICKS_START
+1. [Product/Brand Name] | [TIER - one of MEETS EXACT CRITERIA / MEETS MOST CRITERIA / MEETS MINIMAL CRITERIA - followed by an em dash and a one-line reason, plus any hard requirement it misses] | [Direct product page URL]
+2. [Product/Brand Name] | [One-line reason] | [URL]
+3. [Product/Brand Name] | [One-line reason] | [URL]
+4. [Product/Brand Name] | [One-line reason] | [URL]
+5. [Product/Brand Name] | [One-line reason] | [URL]
+TOP_PICKS_END`;
 
 // ═══════════════════════════════════════════
 // SCREEN MANAGEMENT
@@ -1556,6 +1619,7 @@ async function doTopic() {
   G.callCount = 0;
   G.masterSource = null;
   G.tokens = { in: 0, out: 0, calls: 0 };
+  resetRunGuards();
   hideErr('topic-err');
 
   showScreen('research');
@@ -1660,6 +1724,216 @@ async function startResearchPass(parts, extraCtx) {
 // ═══════════════════════════════════════════
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+/* ═══════════════════════════════════════════
+   RUN GUARDS
+   guardRound() is called by every streaming loop immediately before it issues a
+   request, and is the ONLY place a run can be stopped. It covers the three ways
+   a run previously could not be stopped: the user wanting out, the loop never
+   terminating, and the run costing more than it should. RunStopped is thrown
+   rather than a plain Error so the catch blocks can present it as a stop rather
+   than as a failure.
+   ═══════════════════════════════════════════ */
+class RunStopped extends Error {
+  constructor(msg, kind) { super(msg); this.name = 'RunStopped'; this.kind = kind; }
+}
+
+function guardRound(maxRounds) {
+  if (G.cancelled) throw new RunStopped('Run stopped at your request. Nothing was saved.', 'cancelled');
+  G.rounds++;
+  if (G.rounds > maxRounds) {
+    throw new RunStopped(
+      'Run stopped after ' + maxRounds + ' API rounds without finishing. This is a built-in ' +
+      'safety limit, not an API error — it exists so a run cannot loop indefinitely. ' +
+      'Spend on this run was $' + costTotal().toFixed(4) + '.', 'rounds');
+  }
+  const spent = costTotal();
+  if (spent >= RUN_COST_CEILING) {
+    throw new RunStopped(
+      'Run stopped at $' + spent.toFixed(4) + ', which reached the $' + RUN_COST_CEILING.toFixed(2) +
+      ' limit for a single run. This is separate from your $' + BUDGET_MONTHLY_CAP +
+      ' monthly cap, which is untouched.', 'cost');
+  }
+}
+
+function resetRunGuards() {
+  G.rounds = 0;
+  G.cancelled = false;
+  G.controller = null;
+}
+
+// Wired to both Stop buttons. Aborting the controller tears down the in-flight
+// stream immediately; the cancelled flag stops the loop from starting another.
+function stopRun() {
+  G.cancelled = true;
+  try { if (G.controller) G.controller.abort(); } catch (e) {}
+  setStopControls(false);
+}
+
+function setStopControls(on) {
+  ['stop-run-wrap', 'stop-refine-wrap'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = on ? 'block' : 'none';
+  });
+}
+
+function isStopLike(err) {
+  return err && (err.name === 'RunStopped' || err.name === 'AbortError');
+}
+
+/* ═══════════════════════════════════════════
+   MASTER_SOURCE SECTION MODEL
+   The guide is a flat list of "## " sections. Splitting on the heading boundary
+   and joining the parts back with a newline reproduces the original file byte
+   for byte, which is what makes a section-level patch safe: any section the
+   model does not return is not rewritten, it is simply carried across.
+   ═══════════════════════════════════════════ */
+function splitMasterSections(md) {
+  return String(md || '').split(/\n(?=##\s)/).map(part => ({
+    heading: (part.match(/^##\s*([^\n]+)/) || [])[1] || null,
+    text: part
+  }));
+}
+
+function joinMasterSections(sections) {
+  return sections.map(s => s.text).join('\n');
+}
+
+function countEntriesIn(t) {
+  return (String(t || '').match(/^\s*(?:[-*]\s+\S|\d+\.\s+\S|\|\s*[^-|\s])/gm) || []).length;
+}
+
+function boldNamesIn(t) {
+  return (String(t || '').match(/\*\*([^*\n]{3,90})\*\*/g) || [])
+    .map(x => x.replace(/\*\*/g, '').trim())
+    .filter(x => x.length > 3);
+}
+
+function normHeading(h) {
+  return String(h || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function isChangelogHeading(h) { return /changelog/i.test(h || ''); }
+function isTopPicksHeading(h)  { return /top\s+recommendations/i.test(h || ''); }
+
+function buildSectionIndex(sections) {
+  return sections.filter(s => s.heading)
+    .map(s => '- ' + s.heading + '  [' + countEntriesIn(s.text) + ' entries, ' + s.text.length + ' chars]')
+    .join('\n');
+}
+
+function topPicksAsText(picks) {
+  if (!picks || !picks.length) return '(none recorded)';
+  return picks.map((p, i) => (i + 1) + '. ' + p.name + ' | ' + p.reason + ' | ' + p.url).join('\n');
+}
+
+function buildTopPicksSection(picks) {
+  return '## TOP RECOMMENDATIONS\n\n' +
+    picks.map((p, i) => (i + 1) + '. **' + p.name + '** — ' + p.reason + '\n   ' + p.url).join('\n\n') +
+    '\n';
+}
+
+function matchSectionHeading(sections, wantedHeading) {
+  const w = normHeading(wantedHeading);
+  if (!w) return -1;
+  const exact = sections.findIndex(s => s.heading && normHeading(s.heading) === w);
+  if (exact > -1) return exact;
+  return sections.findIndex(s => {
+    if (!s.heading) return false;
+    const h = normHeading(s.heading);
+    return h.indexOf(w) === 0 || w.indexOf(h) === 0;
+  });
+}
+
+function setRefineProgressSafe(pct, label) {
+  const f = document.getElementById('refine-prog-fill');
+  const l = document.getElementById('refine-prog-label');
+  if (f) f.style.width = pct + '%';
+  if (l) l.textContent = label;
+}
+
+/* ═══════════════════════════════════════════
+   REFINE PATCH — PARSE AND MERGE
+   The model returns only the sections it changed. Everything else is carried
+   across untouched, which is what makes content loss structurally impossible
+   rather than something the model has to be trusted and paid to avoid.
+   ═══════════════════════════════════════════ */
+function parseRefinePatch(fullText) {
+  const out = { patches: [], changelog: '', needs: '' };
+  const src = String(fullText || '');
+  const pm = src.match(/===PATCH_START===([\s\S]*?)===PATCH_END===/);
+  if (pm) {
+    pm[1].split(/<<<SECTION>>>/).forEach(chunk => {
+      const t = chunk.replace(/^\s*\n/, '').trim();
+      if (!t) return;
+      const h = (t.match(/^##\s*([^\n]+)/) || [])[1];
+      if (h) out.patches.push({ heading: h.trim(), text: t });
+    });
+  }
+  const cm = src.match(/CHANGELOG_START([\s\S]*?)CHANGELOG_END/);
+  if (cm) out.changelog = cm[1].trim();
+  const nm = src.match(/NEEDS_START([\s\S]*?)NEEDS_END/);
+  if (nm) {
+    const n = nm[1].trim();
+    // An unfilled template placeholder starts with "[" — that is not a real request.
+    out.needs = /^\[/.test(n) ? '' : n;
+  }
+  return out;
+}
+
+function applyRefinePatch(master, patches, changelogBullets, picks) {
+  const sections = splitMasterSections(master);
+  const losses = [];
+  const additions = [];
+
+  patches.forEach(p => {
+    const idx = matchSectionHeading(sections, p.heading);
+    const body = p.text.replace(/\s+$/, '') + '\n';
+    if (idx === -1) { additions.push({ heading: p.heading, text: body }); return; }
+
+    const before = sections[idx].text;
+    const beforeCount = countEntriesIn(before);
+    const afterCount  = countEntriesIn(body);
+    if (afterCount < beforeCount) {
+      losses.push('Section "' + sections[idx].heading + '": ' + beforeCount + ' entries before, ' +
+                  afterCount + ' after — ' + (beforeCount - afterCount) + ' lost');
+    }
+    const gone = boldNamesIn(before).filter(n => body.indexOf(n) === -1);
+    if (gone.length) {
+      losses.push('Section "' + sections[idx].heading + '" — named entries no longer present: ' +
+                  gone.slice(0, 12).join(' · ') +
+                  (gone.length > 12 ? ' (+' + (gone.length - 12) + ' more)' : ''));
+    }
+    sections[idx] = { heading: p.heading, text: body };
+  });
+
+  // A brand new section is inserted just before the changelog, so the changelog stays last.
+  let clIdx = sections.findIndex(s => isChangelogHeading(s.heading));
+  if (clIdx === -1) clIdx = sections.length;
+  additions.forEach(a => { sections.splice(clIdx, 0, a); clIdx++; });
+
+  // The app owns TOP RECOMMENDATIONS and rebuilds it from the parsed picks.
+  if (picks && picks.length) {
+    const tIdx = sections.findIndex(s => isTopPicksHeading(s.heading));
+    const rebuilt = { heading: 'TOP RECOMMENDATIONS', text: buildTopPicksSection(picks) };
+    if (tIdx > -1) sections[tIdx] = rebuilt;
+    else sections.splice(1, 0, rebuilt);
+  }
+
+  // The app owns the changelog and can only ever append to it.
+  if (changelogBullets) {
+    const entry = '\n### ' + new Date().toISOString().slice(0, 10) + ' — Refine pass (MODEL_PENDING)\n' +
+                  changelogBullets.replace(/\s+$/, '') + '\n';
+    const ci = sections.findIndex(s => isChangelogHeading(s.heading));
+    if (ci > -1) {
+      sections[ci] = { heading: sections[ci].heading, text: sections[ci].text.replace(/\s+$/, '') + '\n' + entry };
+    } else {
+      sections.push({ heading: '8. CHANGELOG', text: '## 8. CHANGELOG\n' + entry });
+    }
+  }
+
+  return { md: joinMasterSections(sections), losses };
+}
+
 async function runStream(phase, attempt = 0) {
   hideErr('res-err');
   // Remove any stale partial recovery button
@@ -1671,8 +1945,12 @@ async function runStream(phase, attempt = 0) {
   cursorEl.className = 'cursor';
 
   try {
+    guardRound(MAX_ROUNDS_RESEARCH);
+    setStopControls(true);
+    G.controller = new AbortController();
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: G.controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': G.key,
@@ -1814,11 +2092,13 @@ async function runStream(phase, attempt = 0) {
   } catch (err) {
     cursorEl.remove();
     if (G.tokens.in > 0 || G.tokens.out > 0) {
-      logRunToFirestore('failed');
+      logRunToFirestore(isStopLike(err) ? 'stopped' : 'failed');
     }
     // ── PARTIAL RECOVERY: offer download of whatever was saved ──
     const ckpt = localStorage.getItem('cf_checkpoint');
-    let errMsg = err.message;
+    let errMsg = isStopLike(err)
+      ? (err.name === 'AbortError' ? 'Run stopped at your request.' : err.message)
+      : err.message;
     if (ckpt) {
       try {
         const p = JSON.parse(ckpt);
@@ -1832,6 +2112,7 @@ async function runStream(phase, attempt = 0) {
     console.error(err);
   } finally {
     G.streaming = false;
+    setStopControls(false);
   }
 }
 
@@ -2428,6 +2709,13 @@ function updateTracker() {
   document.getElementById('t-out-cost').textContent = '$' + oc.toFixed(4);
   document.getElementById('t-total').textContent    = '$' + tot.toFixed(4);
   document.getElementById('tracker-hdr-cost').textContent = '$' + tot.toFixed(4);
+  // The same figure, shown next to the Stop button so the user does not have to
+  // hunt for it while deciding whether to stop a run.
+  const live = '$' + tot.toFixed(4) + ' of $' + RUN_COST_CEILING.toFixed(2) + ' limit · round ' + G.rounds;
+  ['run-cost-live', 'refine-cost-live'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = live;
+  });
 }
 
 // ═══════════════════════════════════════════
@@ -2497,18 +2785,112 @@ async function startRefinePass(req) {
   G.searchCount = 0;
   G.callCount = 0;
   G.tokens = { in: 0, out: 0, calls: 0 };
+  resetRunGuards();
   document.getElementById('refine-search-ct').textContent = '0';
 
-  const priorContext = G.priorAnswers.length
-    ? `\n\nOriginal buyer answers:\n${G.priorAnswers.join('\n')}`
-    : '';
+  // The master this pass started from. Every check at the end compares against
+  // this exact text rather than against anything the model claims it did.
+  G.refineBaseMaster = G.masterSource || '';
+  const allSections = splitMasterSections(G.refineBaseMaster);
+  const editable = allSections.filter(s =>
+    s.heading && !isChangelogHeading(s.heading) && !isTopPicksHeading(s.heading));
 
-  G.conversation = [{
-    role: 'user',
-    content: `[PHASE:REFINE]\n\nTopic: ${G.topic}${priorContext}\n\nRefinement request: ${req}\n\nExisting MASTER_SOURCE:\n${G.masterSource}`
-  }];
+  try {
+    setStopControls(true);
+    setRefineProgressSafe(6, 'Working out which sections this change touches…');
 
-  await runRefineStream();
+    let chosen = [];
+    const wanted = await selectRefineSections(req, editable);
+    if (wanted) {
+      wanted.forEach(w => {
+        const i = matchSectionHeading(editable, w);
+        if (i > -1 && chosen.indexOf(editable[i]) === -1) chosen.push(editable[i]);
+      });
+    }
+    if (!chosen.length) {
+      // Never fail closed on selection — fall back to sending everything editable.
+      // That is the old expensive behaviour, but it is never wrong.
+      chosen = editable.slice();
+      console.warn('Section selection produced nothing usable — sending all editable sections.');
+    }
+    G.refineScope = chosen.map(s => s.heading);
+
+    const priorContext = G.priorAnswers.length
+      ? `\n\nOriginal buyer answers:\n${G.priorAnswers.join('\n')}`
+      : '';
+
+    const scopeText = chosen.map(s => '<<<SECTION>>>\n' + s.text.trim()).join('\n\n');
+
+    G.conversation = [{
+      role: 'user',
+      content:
+        `[PHASE:REFINE]\n\nTopic: ${G.topic}${priorContext}\n\n` +
+        `Refinement request: ${req}\n\n` +
+        `SECTION INDEX (every section in the guide — you have the full text of only some of them):\n` +
+        `${buildSectionIndex(allSections)}\n\n` +
+        `CURRENT TOP 5:\n${topPicksAsText(G.topPicks)}\n\n` +
+        `FULL TEXT OF THE SECTIONS YOU MAY EDIT:\n${scopeText}`
+    }];
+
+    setRefineProgressSafe(12, `Refining ${chosen.length} of ${editable.length} sections…`);
+    await runRefineStream();
+  } catch (err) {
+    setStopControls(false);
+    showErr('refine-err', isStopLike(err)
+      ? (err.name === 'AbortError' ? 'Run stopped at your request.' : err.message)
+      : err.message);
+    document.getElementById('refine-input-box').style.display = 'block';
+    document.getElementById('refine-progress-wrap').style.display = 'none';
+    console.error(err);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   REFINE — SECTION SELECTION
+   One cheap call, no web search, asking which sections the change touches.
+   Only those are sent for editing. If it fails for any reason the caller falls
+   back to sending every editable section: expensive, but never wrong.
+   ═══════════════════════════════════════════ */
+async function selectRefineSections(req, sections) {
+  try {
+    guardRound(MAX_ROUNDS_REFINE);
+    G.controller = new AbortController();
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: G.controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': G.key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 700,
+        output_config: { effort: 'medium' },
+        system: SYS,
+        messages: [{
+          role: 'user',
+          content: `[PHASE:SELECT]\n\nRefinement request: ${req}\n\nSection index:\n${buildSectionIndex(sections)}`
+        }]
+      })
+    });
+    if (!resp.ok) return null;
+    const j = await resp.json();
+    G.tokens.in  += (j.usage && j.usage.input_tokens)  || 0;
+    G.tokens.out += (j.usage && j.usage.output_tokens) || 0;
+    G.tokens.calls++;
+    updateTracker();
+    const txt = (j.content || []).map(c => c.text || '').join('\n');
+    const wanted = txt.split('\n')
+      .map(l => l.replace(/^[\s\-*•]+/, '').replace(/^##\s*/, '').trim())
+      .filter(Boolean);
+    return wanted.length ? wanted : null;
+  } catch (err) {
+    if (isStopLike(err)) throw err;
+    console.warn('Section selection failed, falling back to all sections:', err.message);
+    return null;
+  }
 }
 
 async function runRefineStream(attempt = 0) {
@@ -2524,8 +2906,12 @@ async function runRefineStream(attempt = 0) {
   cursorEl.className = 'cursor';
 
   try {
+    guardRound(MAX_ROUNDS_REFINE);
+    setStopControls(true);
+    G.controller = new AbortController();
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: G.controller.signal,
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': G.key,
@@ -2612,29 +2998,26 @@ async function runRefineStream(attempt = 0) {
       return;
     }
 
-    // Parse updated MASTER_SOURCE
-    const match = fullText.match(/===MASTER_SOURCE_START===([\s\S]*?)===MASTER_SOURCE_END===/);
-    if (!match) {
-      G.conversation.push({ role: 'user', content: 'Now output the complete updated MASTER_SOURCE between ===MASTER_SOURCE_START=== and ===MASTER_SOURCE_END=== markers.' });
+    // ── Parse the PATCH the model returned ──────────────────────────────────
+    // The model no longer emits the whole guide, so there is no MASTER_SOURCE
+    // block to look for. It returns only the sections it actually changed.
+    const patch = parseRefinePatch(fullText);
+
+    if (!patch.patches.length) {
+      // Nothing usable came back. Ask once more in the same conversation. The
+      // round guard is what stops this from becoming the infinite loop it was.
+      G.conversation.push({
+        role: 'user',
+        content: 'Your reply did not contain a usable patch. Output ONLY the sections you are ' +
+                 'changing, each starting with its "## " heading, between ===PATCH_START=== and ' +
+                 '===PATCH_END=== and separated by <<<SECTION>>>, followed by the CHANGELOG, ' +
+                 'NEEDS and TOP_PICKS blocks. Do not output the whole guide.'
+      });
       await runRefineStream();
       return;
     }
 
-    // Snapshot the master we were given BEFORE overwriting it, so the preservation
-    // audit compares the real before/after rather than trusting the model's word.
-    const prevMasterForAudit = G.masterSource || '';
-    G.masterSource = stampModelName(match[1].trim());
-    G.refineLosses = auditRefinePreservation(prevMasterForAudit, G.masterSource);
-    if (G.refineLosses) {
-      G.masterSource += '\n\n## ⚠ REFINE INTEGRITY WARNING — ' + new Date().toISOString().slice(0, 10) + '\n' +
-        'The automated preservation check found that this refine pass dropped content that was\n' +
-        'present in the previous version of this file. This guide should be treated as incomplete\n' +
-        'until the missing material is restored. The previous version was NOT overwritten.\n\n' +
-        G.refineLosses.map(p => '- ' + p).join('\n') + '\n';
-    }
-    renderRefineIntegrity(G.refineLosses);
-
-    // Re-parse the Top 5 on refine. Without this every re-run silently lost it.
+    // Re-rank the Top 5 first — the app owns that section and rebuilds it.
     const rPicks = fullText.match(/TOP_PICKS_START\s*([\s\S]*?)\s*TOP_PICKS_END/);
     if (rPicks) {
       const parsed = rPicks[1].trim().split('\n')
@@ -2646,16 +3029,32 @@ async function runRefineStream(attempt = 0) {
       if (parsed.length) G.topPicks = parsed;
     }
 
-    // Embed into the .md if the model did not already write the section itself
-    if (G.topPicks && G.topPicks.length > 0 && !/##\s*TOP RECOMMENDATIONS/i.test(G.masterSource)) {
-      const picksMd = '\n\n## TOP RECOMMENDATIONS\n\n' +
-        G.topPicks.map((p, i) => `${i + 1}. **${p.name}** — ${p.reason}\n   ${p.url}`).join('\n\n') +
-        '\n';
-      const firstBreak = G.masterSource.indexOf('\n## ');
-      G.masterSource = firstBreak > -1
-        ? G.masterSource.slice(0, firstBreak) + picksMd + G.masterSource.slice(firstBreak)
-        : G.masterSource + picksMd;
+    // ── Splice the patch into the master the app has been holding ───────────
+    const baseMaster = G.refineBaseMaster || G.masterSource || '';
+    const merged = applyRefinePatch(baseMaster, patch.patches, patch.changelog, G.topPicks);
+    G.masterSource = stampModelName(merged.md);
+
+    // Two independent checks, both against real text and neither against the
+    // model's own account of what it did: per-section counts on exactly the
+    // sections that were rewritten, plus the whole-document audit as a backstop
+    // over the merged result.
+    const losses = merged.losses.slice();
+    const wholeDoc = auditRefinePreservation(baseMaster, G.masterSource);
+    if (wholeDoc) wholeDoc.forEach(p => { if (losses.indexOf(p) === -1) losses.push(p); });
+    if (patch.needs) {
+      losses.push('The model reported it needed sections it was not given: ' +
+                  patch.needs.replace(/\s+/g, ' ').trim());
     }
+    G.refineLosses = losses.length ? losses : null;
+
+    if (G.refineLosses) {
+      G.masterSource += '\n\n## ⚠ REFINE INTEGRITY WARNING — ' + new Date().toISOString().slice(0, 10) + '\n' +
+        'The automated preservation check found a problem with this refine pass. This guide\n' +
+        'should be treated as incomplete until the points below are resolved. The previous\n' +
+        'version was NOT overwritten.\n\n' +
+        G.refineLosses.map(p => '- ' + p).join('\n') + '\n';
+    }
+    renderRefineIntegrity(G.refineLosses);
 
     if (!G.topPicks || G.topPicks.length === 0) {
       console.warn('Refine finished without a TOP_PICKS block.');
