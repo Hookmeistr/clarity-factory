@@ -1385,6 +1385,14 @@ HORIZONTAL: Run scan queries to find new entrants, discontinued products, new ca
 - [Key findings]
 ===MASTER_SOURCE_END===
 
+MODEL NAME — never write one yourself:
+You do not know which model or effort level is running you, and a guess that looks like a
+fact is worse than a gap. Wherever a model name belongs — the metadata table, a changelog
+heading, anywhere in prose — write the literal token MODEL_PENDING and nothing else. The
+app replaces every occurrence with the real model and effort from its own configuration
+before the file is saved. Never copy a model name out of an example, out of the existing
+file, or out of your own assumptions about yourself.
+
 RULES: Neutral · Grade scale A+–F · All prices from live search · Flag anything unverified
 
 BRAND LINE-UP COMPLETENESS — MANDATORY, DO NOT SKIP.
@@ -2274,7 +2282,9 @@ function stampModelName(md) {
     ? MODEL.replace(/^claude-/, 'Claude ')
            .replace(/-/g, ' ')
            .replace(/\b\w/g, c => c.toUpperCase())
-    : 'Claude Sonnet 5';
+    // Never fall back to a model NAME. A hardcoded name here would be a guess that
+    // looks like a fact, which is the whole defect this stamping exists to prevent.
+    : 'model not recorded';
   const eff = (typeof EFFORT === 'string' && EFFORT) ? ` (effort: ${EFFORT})` : '';
   let out = md.replace(/^(\|\s*Last update model\s*\|).*$/mi, `$1 ${pretty}${eff} |`);
   // The model used to invent a version number in the changelog heading. Stamp it here
