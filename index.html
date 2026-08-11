@@ -893,7 +893,7 @@
     <div class="research-header">
       <div class="dot pulsing" id="res-dot"></div>
       <span class="h2" id="res-title" style="margin-bottom:0">Researching…</span>
-      <span class="phase-pill discovery" id="phase-pill">Stage 0</span>
+      <span class="phase-pill discovery" id="phase-pill">Stage 1 of 3</span>
     </div>
 
     <div class="progress-wrap">
@@ -1658,7 +1658,7 @@ async function doTopic() {
 
   showScreen('research');
   document.getElementById('res-title').textContent = `Researching: ${t}`;
-  setPill('discovery', 'Stage 0 — Discovery');
+  setPill('discovery', 'Discovery', 1);
   setProgress(4, 'Discovering what matters…');
   clearStream();
 
@@ -1737,7 +1737,7 @@ async function doAnswers() {
 async function startResearchPass(parts, extraCtx) {
   document.getElementById('q-box').style.display = 'none';
   clearStream();
-  setPill('research', 'Stage 1–3 — Full Research');
+  setPill('research', 'Research', 2);
   setProgress(15, 'Running full research pass…');
   showScreen('research');
   document.getElementById('run-context-btn-wrap').style.display = 'block';
@@ -2274,7 +2274,7 @@ function parseDiscovery(text) {
   document.getElementById('q-box').style.display = 'block';
   setProgress(12, 'Please answer the questions below…');
   setTimeout(() => document.getElementById('q-box').scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
-  setPill('discovery', 'Stage 0 — Questions');
+  setPill('discovery', 'Questions', 1);
 }
 
 // ═══════════════════════════════════════════
@@ -2390,7 +2390,7 @@ function parseResearch(text) {
   const match = text.match(/===MASTER_SOURCE_START===([\s\S]*?)===MASTER_SOURCE_END===/);
 
   if (!match) {
-    setPill('generating', 'Generating…');
+    setPill('generating', 'Writing your guide', 3);
     setProgress(88, 'Generating MASTER_SOURCE…');
     G.conversation.push({
       role: 'user',
@@ -2430,7 +2430,7 @@ function parseResearch(text) {
 
   localStorage.removeItem('cf_checkpoint');
   setProgress(100, 'Complete');
-  setPill('complete', 'Complete');
+  setPill('complete', 'Complete', 3);
   document.getElementById('res-dot').classList.remove('pulsing');
   document.getElementById('res-dot').classList.add('done');
   document.getElementById('run-context-btn-wrap').style.display = 'none';
@@ -3176,10 +3176,13 @@ function appendStream(text, cursorEl) {
   box.scrollTop = box.scrollHeight;
 }
 
-function setPill(cls, text) {
+let uiStage = 0;   // remembered across calls so Pacing and friends keep the position
+
+function setPill(cls, text, stage) {
+  if (typeof stage === 'number') uiStage = stage;
   const p = document.getElementById('phase-pill');
   p.className = `phase-pill ${cls}`;
-  p.textContent = text;
+  p.textContent = (uiStage ? 'Stage ' + uiStage + ' of 3 — ' : '') + text;
 }
 
 function setProgress(pct, label) {
