@@ -1043,6 +1043,12 @@
       <textarea id="sharpen-text" rows="16" style="width:100%;font-size:0.92rem;padding:0.8rem;background:var(--surface3);border:1px solid var(--ember-lo);border-radius:3px;color:var(--text-bright);font-family:var(--ff-body);resize:vertical;line-height:1.6;box-sizing:border-box;"></textarea>
     </div>
 
+    <div id="sharpen-tiers-wrap" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:0.9rem 1rem;margin-bottom:1.25rem;">
+      <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">Requirement weighting</div>
+      <p style="font-size:0.83rem;color:var(--text-faint);margin-bottom:0.75rem;line-height:1.5;">Click any button to change how a requirement is weighted. <strong style="color:var(--text-dim);">Absolute</strong> rules a product out entirely. <strong style="color:var(--text-dim);">Strong</strong> counts heavily against it. <strong style="color:var(--text-dim);">Nice to have</strong> only breaks ties. Nothing needs typing &mdash; what you set here is what the research uses.</p>
+      <div id="sharpen-tiers"></div>
+    </div>
+
     <div id="sharpen-additions-wrap" style="display:none;background:var(--surface2);border-left:3px solid var(--ember-lo);border-radius:var(--r);padding:0.85rem 1rem;margin-bottom:1.25rem;">
       <div style="font-family:var(--ff-mono);font-size:0.78rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.4rem;">Inferred — not stated by you</div>
       <div id="sharpen-additions" style="font-size:0.88rem;color:var(--text-dim);line-height:1.6;"></div>
@@ -3361,14 +3367,16 @@ DO:
 - Force the research to address things manufacturers do NOT publish, by naming the
   measurable proxies that should be reasoned from instead.
 - Convert vague wording into testable requirements.
-- Sort EVERY requirement into exactly three tiers and say which tier each one is in:
+- Sort EVERY requirement into exactly three tiers and return them in the "tiers" array below:
     ABSOLUTE     - disqualifying. A product that fails this is out, however good it is otherwise.
     STRONG       - heavily penalised if missed, but not disqualifying on its own.
     NICE TO HAVE - a tie-breaker only, never a reason to reject a product.
-  End the brief with a "REQUIREMENT TIERS" heading listing them one per line, in the form
-  "ABSOLUTE: ...", "STRONG: ...", "NICE TO HAVE: ...".
-  If the buyer did not state the weighting, infer it from how they worded it and list that
-  inference in "additions" so they can correct it. Default to STRONG when genuinely
+  DO NOT write a "REQUIREMENT TIERS" heading, or any tier list, into the brief itself. The
+  app shows the tiers to the buyer as buttons they can change with one click, and appends
+  the final list to the brief afterwards. A tier list written into the brief would
+  contradict whatever they chose, so it is stripped before the research runs.
+  If the buyer did not state the weighting, infer it from how they worded it and set
+  "inferred": true on that entry so they can correct it. Default to STRONG when genuinely
   unclear. Never invent an ABSOLUTE the buyer did not clearly intend - an invented absolute
   silently deletes products they might have wanted to see.
 - Instruct the research to say so plainly if a requirement eliminates all candidates,
@@ -3398,6 +3406,7 @@ Return ONLY valid JSON, no markdown fences, no preamble:
 {
   "brief": "the sharpened research brief as plain text",
   "additions": ["short plain-language note of each thing you inferred rather than were told"],
+  "tiers": [{"text": "one requirement, stated plainly in under 90 characters", "tier": "ABSOLUTE | STRONG | NICE TO HAVE", "inferred": true}],
   "relevantStoredPreferences": ["exact text of each stored preference that applies here"],
   "newPortablePreferences": ["short general preference worth remembering for future guides"]
 }
@@ -3415,6 +3424,8 @@ async function sharpenRequest(rawText, contextNote, onAccept) {
   document.getElementById('sharpen-original').textContent = rawText;
   document.getElementById('sharpen-text').value = 'Working on it…';
   document.getElementById('sharpen-additions-wrap').style.display = 'none';
+  document.getElementById('sharpen-tiers-wrap').style.display = 'none';
+  document.getElementById('sharpen-tiers').innerHTML = '';
   hideErr('sharpen-err');
   showScreen('sharpen');
 
@@ -3468,6 +3479,10 @@ async function sharpenRequest(rawText, contextNote, onAccept) {
         adds.map(a => '&bull; ' + esc(a)).join('<br>');
       document.getElementById('sharpen-additions-wrap').style.display = 'block';
     }
+
+    renderTierPicker(Array.isArray(parsed.tiers)
+      ? parsed.tiers.filter(t => t && typeof t.text === 'string' && t.text.trim())
+      : []);
 
     const relevant = Array.isArray(parsed.relevantStoredPreferences) ? parsed.relevantStoredPreferences : [];
     sharpenPending.newPortable = Array.isArray(parsed.newPortablePreferences)
@@ -3557,16 +3572,125 @@ function renderRememberBox(newPortable) {
   wrap.style.display = 'block';
 }
 
+/* ═══════════════════════════════════════════
+   REQUIREMENT TIER PICKER
+   Tiers are data, not prose. The model proposes one tier per requirement; the buyer
+   changes any of them with a single click; acceptSharpened() then composes the
+   REQUIREMENT TIERS block the research pass reads from what is selected HERE. The brief
+   textarea is never the source of truth for weighting - stripTierBlock() removes any tier
+   list the model wrote into it, so the buttons cannot be contradicted by stale text.
+   ═══════════════════════════════════════════ */
+const TIER_DEFS = [
+  { key: 'ABSOLUTE',     label: 'Absolute' },
+  { key: 'STRONG',       label: 'Strong' },
+  { key: 'NICE TO HAVE', label: 'Nice to have' }
+];
+
+function normaliseTier(v) {
+  const t = String(v || '').toUpperCase().replace(/[^A-Z ]/g, '').trim();
+  if (t.indexOf('ABSOLUTE') === 0) return 'ABSOLUTE';
+  if (t.indexOf('NICE') === 0)     return 'NICE TO HAVE';
+  return 'STRONG';   // documented default when the model is unclear
+}
+
+function renderTierPicker(tiers) {
+  const wrap = document.getElementById('sharpen-tiers-wrap');
+  const box  = document.getElementById('sharpen-tiers');
+  if (!wrap || !box) return;
+  box.innerHTML = '';
+  if (!tiers.length) { wrap.style.display = 'none'; return; }
+
+  tiers.forEach((t, i) => {
+    const row = document.createElement('div');
+    row.className = 'tier-row';
+    row.dataset.text = String(t.text).trim();
+    row.dataset.tier = normaliseTier(t.tier);
+    row.style.cssText = 'padding:0.6rem 0;' + (i ? 'border-top:1px solid var(--border2);' : '');
+
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:0.89rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.45rem;';
+    label.textContent = row.dataset.text;
+    if (t.inferred) {
+      const tag = document.createElement('span');
+      tag.textContent = 'inferred';
+      tag.style.cssText = 'font-family:var(--ff-mono);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-faint);border:1px solid var(--border2);border-radius:2px;padding:0.05rem 0.32rem;margin-left:0.45rem;white-space:nowrap;';
+      label.appendChild(tag);
+    }
+
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:0.4rem;flex-wrap:wrap;';
+    TIER_DEFS.forEach(def => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.tier = def.key;
+      b.textContent = def.label;
+      b.style.cssText = 'cursor:pointer;font-family:var(--ff-mono);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;padding:0.34rem 0.62rem;border-radius:2px;background:transparent;';
+      b.onclick = () => { row.dataset.tier = def.key; paintTierRow(row); };
+      btns.appendChild(b);
+    });
+
+    row.appendChild(label);
+    row.appendChild(btns);
+    box.appendChild(row);
+    paintTierRow(row);
+  });
+  wrap.style.display = 'block';
+}
+
+/* Removes a REQUIREMENT TIERS section the model may still have written into the brief.
+   Fail-safe by design: it only strips when EVERY non-empty line after the heading is
+   itself a tier line, so a brief that merely mentions the phrase is left untouched. */
+function stripTierBlock(text) {
+  const lines = String(text).replace(/\r/g, '').split('\n');
+  const head = /^\s*"?REQUIREMENT TIERS"?\s*:?\s*$/i;
+  const tier = /^\s*[-*\u2022]?\s*"?(ABSOLUTE|STRONG|NICE TO HAVE)"?\s*:/i;
+  for (let i = 0; i < lines.length; i++) {
+    if (!head.test(lines[i])) continue;
+    const rest = lines.slice(i + 1).filter(l => l.trim() !== '');
+    if (rest.length && rest.every(l => tier.test(l))) {
+      return lines.slice(0, i).join('\n').trim();
+    }
+  }
+  return String(text).trim();
+}
+
+function readTierPicker() {
+  return [...document.querySelectorAll('#sharpen-tiers .tier-row')]
+    .map(r => r.dataset.tier + ': ' + r.dataset.text)
+    .filter(l => l.trim());
+}
+
+function paintTierRow(row) {
+  const sel = row.dataset.tier;
+  [...row.querySelectorAll('button[data-tier]')].forEach(b => {
+    const on = b.dataset.tier === sel;
+    b.style.background = on ? 'var(--ember)' : 'transparent';
+    b.style.color      = on ? '#160f06' : 'var(--text-faint)';
+    b.style.border     = '1px solid ' + (on ? 'var(--ember)' : 'var(--border2)');
+    b.style.fontWeight = on ? '700' : '400';
+  });
+}
+
 async function acceptSharpened() {
   let text = document.getElementById('sharpen-text').value.trim();
   if (!text) { showErr('sharpen-err', 'The brief cannot be empty.'); return; }
   const p = sharpenPending; sharpenPending = null;
+
+  // The brief never carries its own weighting - the buttons above are the only source.
+  text = stripTierBlock(text);
 
   // Fold in the preferences the user left ticked
   const chosen = [...document.querySelectorAll('.pref-cb:checked')].map(c => c.value);
   if (chosen.length) {
     text += '\n\nSTANDING PREFERENCES (from this buyer\'s earlier guides):\n' +
             chosen.map(c => '- ' + c).join('\n');
+  }
+
+  // Requirement tiers, composed from what the buyer actually set on screen. Last in the
+  // brief so it reads as the final instruction to the research pass.
+  const tierLines = readTierPicker();
+  if (tierLines.length) {
+    text += '\n\nREQUIREMENT TIERS\n' + tierLines.join('\n');
   }
 
   // Remember new portable preferences if the box is ticked
