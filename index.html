@@ -974,9 +974,9 @@
       <div id="drive-save-status" style="display:none;font-family:var(--ff-mono);font-size:0.84rem;margin-top:0.85rem;padding:0.55rem 0.8rem;border-radius:3px;"></div>
       <p style="font-size:0.89rem;color:var(--text-faint);margin-top:0.85rem;line-height:1.6">
         <strong style="color:var(--text-dim)">Open Guide</strong> shows the finished report on screen, where you can save it as a PDF, download it as Word (.docx), or download it as HTML.<br><br>
-        <strong style="color:var(--text-dim)">You do not need to download anything.</strong> This guide is already saved to your Google Drive, and it is already in <strong style="color:var(--text-dim)">My Guides</strong>. To update it later, open My Guides and click <strong style="color:var(--text-dim)">Re-run with edits</strong> — no upload, no file handling.<br><br>
+        <strong style="color:var(--text-dim)">Whether this guide reached your Google Drive is stated above</strong>, in the line under the buttons. If it saved, it is also in <strong style="color:var(--text-dim)">My Guides</strong> and you can update it later with <strong style="color:var(--text-dim)">Re-run with edits</strong> — no upload, no file handling. If it did not save, download the .md now: that download is the only copy.<br><br>
         <strong style="color:var(--text-dim)">The .md download</strong> is an optional spare copy for your own records, or for opening the guide in another tool. Nothing in this app requires it.<br><br>
-        <strong style="color:var(--text-dim)">Quarterly updates:</strong> next update due in 3 months — use My Guides → Re-run with edits.
+        <strong style="color:var(--text-dim)">Refreshing this guide:</strong> products and stock change, so re-running every few months is worth considering — never required. Use My Guides → Re-run with edits whenever you want.
       </p>
     </div>
 
@@ -2611,7 +2611,7 @@ function showComplete() {
     <div class="complete-stat">Searches run: <span>${G.searchCount}</span></div>
     <div class="complete-stat">Total cost: <span>$${total.toFixed(4)}</span></div>
     <div class="complete-stat">Logged to: <span>Firebase / clarity-factory-prod</span></div>
-    <div class="complete-stat">Next update due: <span>${nextUpdateDate()}</span></div>
+    <div class="complete-stat">Suggested refresh after: <span>${nextUpdateDate()}</span></div>
   `;
 
   // Render top picks
@@ -2639,10 +2639,12 @@ function showComplete() {
 
   showScreen('complete');
 
-  // If signed into Google, auto-save this guide to the user's own Drive
-  if (googleAuth.profile && googleAuth.token) {
-    saveGuideToDrive();
-  }
+  // Auto-save to the user's own Drive. This is deliberately NOT conditional on looking
+  // signed in: a cached profile with a dead token used to skip the save silently, and
+  // the user was told nothing. saveGuideToDrive() reports every outcome itself.
+  saveGuideToDrive().catch(e => driveStatus(false,
+    'NOT saved to your Drive. Download the .md above - right now that is the only copy. ' +
+    (e && e.message ? e.message : 'The save could not be completed.')));
 }
 
 // ═══════════════════════════════════════════
@@ -4083,11 +4085,37 @@ async function guideParents(topic) {
 }
 
 // Save the current guide's .md to the user's own Drive
+/* Every path out of saveGuideToDrive() goes through this, so the completion screen can
+   never stay silent about what happened to the user's guide. Silence is what cost a run
+   on 2026-08-11: the save threw before the try block, nothing was displayed, and the
+   fixed help text underneath said the guide was already safe in Drive. */
+function driveStatus(ok, message) {
+  const el = document.getElementById('drive-save-status');
+  if (!el) return;
+  el.style.display = 'block';
+  el.style.background = ok ? 'rgba(70,150,100,0.12)' : 'rgba(200,92,40,0.14)';
+  el.style.color = ok ? '#6ca' : 'var(--ember)';
+  el.style.lineHeight = '1.5';
+  el.textContent = (ok ? '\u2713 ' : '\u26a0 ') + message;
+}
+
+// Google's own wording is unusable by a person. Say what to actually do about it.
+function driveErrorHint(status) {
+  if (status === 401 || status === 403)
+    return 'The app does not have permission to save to your Drive right now. Click your name at the top left, sign out, then sign back in and approve Drive access when Google asks.';
+  if (status === 404)
+    return 'The folder it was told to save into no longer exists. Open My Guides and choose a save folder again.';
+  return 'Google refused the save (error ' + status + ').';
+}
+
 async function saveGuideToDrive() {
-  if (!googleAuth.token || !G.masterSource) return false;
-  await ensureReportsFolder();
-  const statusEl = document.getElementById('drive-save-status');
+  if (!G.masterSource) { driveStatus(false, 'Nothing to save yet.'); return false; }
+  if (!googleAuth.token) {
+    driveStatus(false, 'NOT saved to your Drive - you are not signed in to Google. Use the .md download above to keep this guide.');
+    return false;
+  }
   try {
+    await ensureReportsFolder();
     const meta = {
       name: `${slug(G.topic)}_${new Date().toISOString().slice(0,10)}.md`,
       parents: await guideParents(G.topic),
@@ -4106,12 +4134,17 @@ async function saveGuideToDrive() {
       body
     });
     if (res.ok) {
-      if (statusEl) { statusEl.style.display='block'; statusEl.style.background='rgba(70,150,100,0.12)'; statusEl.style.color='#6ca'; statusEl.textContent='✓ Saved to your Google Drive → Clarity Factory Reports → ' + topicFolderName(G.topic); }
+      driveStatus(true, 'Saved to your Google Drive, in ' + topicFolderName(G.topic) + '.');
       return true;
     }
-  } catch (e) { console.warn('drive save error', e); }
-  if (statusEl) { statusEl.style.display='block'; statusEl.style.background='rgba(200,92,40,0.12)'; statusEl.style.color='var(--ember)'; statusEl.textContent='Could not save to Drive — your download still works.'; }
-  return false;
+    driveStatus(false, 'NOT saved to your Drive. Download the .md above - right now that is the only copy. ' + driveErrorHint(res.status));
+    console.warn('drive save failed', res.status);
+    return false;
+  } catch (e) {
+    console.warn('drive save error', e);
+    driveStatus(false, 'NOT saved to your Drive. Download the .md above - right now that is the only copy. ' + (e && e.message ? e.message : 'The save could not be completed.'));
+    return false;
+  }
 }
 
 // Upload a binary blob (the generated PDF) to the same Reports folder as the .md,
