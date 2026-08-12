@@ -830,6 +830,8 @@
 <main>
 
   <!-- SCREEN: API KEY -->
+  <div id="drive-access-banner" style="display:none;background:rgba(200,92,40,0.14);border:1px solid var(--ember-lo);border-left:4px solid var(--ember);border-radius:var(--r);padding:0.8rem 1rem;margin:0 auto 1.2rem;max-width:900px;font-size:0.9rem;color:var(--ember);line-height:1.55;"></div>
+
   <div class="screen active" id="scr-key">
     <p class="h1">Welcome.</p>
     <p class="subtitle">
@@ -3791,11 +3793,43 @@ function initGoogleAuth() {
   document.head.appendChild(s2);
 }
 
+/* Google can hand back a perfectly valid token that does NOT include permission to save
+   files. The app used to accept it, look signed in, and only discover the problem when a
+   finished guide failed to save - which is how a completed run was lost on 2026-08-11.
+   The grant is now checked here, once, at the moment the token arrives. */
+function tokenCanSaveFiles(resp) {
+  try {
+    if (window.google && google.accounts && google.accounts.oauth2 &&
+        typeof google.accounts.oauth2.hasGrantedAllScopes === 'function') {
+      return google.accounts.oauth2.hasGrantedAllScopes(resp, 'https://www.googleapis.com/auth/drive.file');
+    }
+  } catch (e) { console.warn('scope check unavailable', e); }
+  // If the check itself is unavailable, fall back to reading the granted list directly.
+  const granted = String((resp && resp.scope) || '');
+  return granted.indexOf('drive.file') !== -1;
+}
+
 function onTokenResponse(resp) {
   if (resp.error) {
     console.warn('Auth error', resp.error);
+    showDriveAccessBanner('Google sign-in did not complete. Click your name at the top left and try again.');
     return;
   }
+  if (!tokenCanSaveFiles(resp)) {
+    // Ask once more, this time forcing the permission screen so the box can be ticked.
+    if (!googleAuth.reaskedForDrive) {
+      googleAuth.reaskedForDrive = true;
+      showDriveAccessBanner('Waiting for permission to save files to your Google Drive…');
+      try { googleAuth.tokenClient.requestAccessToken({ prompt: 'consent' }); return; } catch (e) {}
+    }
+    googleAuth.token = resp.access_token;
+    googleAuth.canSaveToDrive = false;
+    showDriveAccessBanner('You are signed in, but this app cannot save to your Google Drive - the Drive permission was not approved. Guides will still run, and you can download them, but they will not be saved or appear in My Guides. To fix it: click your name at the top left, sign out, sign back in, and tick the box that lets the app create files in your Drive.');
+    return;
+  }
+  googleAuth.reaskedForDrive = false;
+  googleAuth.canSaveToDrive = true;
+  hideDriveAccessBanner();
   googleAuth.token = resp.access_token;
   // Fetch basic profile
   fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -4089,6 +4123,18 @@ async function guideParents(topic) {
    never stay silent about what happened to the user's guide. Silence is what cost a run
    on 2026-08-11: the save threw before the try block, nothing was displayed, and the
    fixed help text underneath said the guide was already safe in Drive. */
+function showDriveAccessBanner(message) {
+  const el = document.getElementById('drive-access-banner');
+  if (!el) return;
+  el.textContent = message;
+  el.style.display = 'block';
+}
+
+function hideDriveAccessBanner() {
+  const el = document.getElementById('drive-access-banner');
+  if (el) el.style.display = 'none';
+}
+
 function driveStatus(ok, message) {
   const el = document.getElementById('drive-save-status');
   if (!el) return;
@@ -4748,6 +4794,8 @@ async function deleteGuide(fileId, name) {
 }
 
 // Import the pre-existing guides into the user's Drive library (one-time)
+let lastImportHint = '';   // plain-language reason for the most recent import failure
+
 async function importPastGuides() {
   const btn = document.getElementById('import-btn');
   const status = document.getElementById('import-status');
@@ -4772,6 +4820,7 @@ async function importPastGuides() {
     status.textContent = `Importing ${prettyTopicFromName(s.name)}…`;
     status.style.color = 'var(--text-faint)';
     try {
+      lastImportHint = '';
       const r = await fetch(s.file, { cache: 'no-store' });
       if (!r.ok) throw new Error('could not read seed file (' + r.status + ')');
       const md = await r.text();
@@ -4780,11 +4829,11 @@ async function importPastGuides() {
       done++;
     } catch (e) {
       console.warn('import failed', s.name, e);
-      errs.push(prettyTopicFromName(s.name) + ': ' + e.message);
+      errs.push(prettyTopicFromName(s.name));
     }
   }
   if (errs.length) {
-    status.textContent = `Imported ${done}${skipped?' (skipped '+skipped+' already there)':''}. Failed: ${errs.join(' | ')}`;
+    status.textContent = `Imported ${done}. Could not import: ${errs.join(', ')}. ` + (lastImportHint || 'Try again in a moment.');
     status.style.color = 'var(--ember)';
   } else {
     status.textContent = skipped && !done
@@ -4814,7 +4863,10 @@ async function saveNamedGuideToDrive(name, content) {
   if (!res.ok) {
     let detail = '';
     try { const j = await res.json(); detail = (j.error && j.error.message) || ''; } catch (e) {}
-    throw new Error('Drive save failed (' + res.status + ') ' + detail);
+    // Google's wording goes to the console; the user gets something they can act on.
+    console.warn('drive save failed', res.status, detail);
+    lastImportHint = driveErrorHint(res.status);
+    throw new Error(driveErrorHint(res.status));
   }
   return true;
 }
