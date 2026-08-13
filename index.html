@@ -1125,7 +1125,7 @@
 
     <div id="guides-import-row" style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);">
       <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.6rem;">
-        First time here? Import your earlier guides (Outdoor Cooking, Coffee Whisk, and Wigs) into your library so you can open and re-run them.
+        First time here? Import your earlier guides (Outdoor Cooking, Coffee Whisk, Wigs, and Massage Oil &amp; Lotion) into your library so you can open and re-run them.
       </p>
       <button class="btn" onclick="importPastGuides()" id="import-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">⬇ Import my past guides</button>
       <span id="import-status" style="font-family:var(--ff-mono);font-size:0.84rem;margin-left:0.75rem;color:var(--text-faint);"></span>
@@ -4805,7 +4805,10 @@ async function importPastGuides() {
   const seeds = [
     { file: 'guides/outdoor_cooking.md', name: 'outdoor_cooking_2026-05-25.md' },
     { file: 'guides/coffee_whisk.md',    name: 'coffee_whisk_2026-07-21.md' },
-    { file: 'guides/wigs.md',            name: 'wigs_2026-05-26.md' }
+    { file: 'guides/wigs.md',            name: 'wigs_2026-05-26.md' },
+    // Ran 2026-08-11 and cost 0.2990 dollars. The Drive save failed while the completion
+    // screen reported success, so this is the recovered copy.
+    { file: 'guides/massage_oil_and_lotion.md', name: 'massage_oil_and_lotion_for_professional_massage_therapy_2026-08-11.md' }
   ];
   // Refresh the library first so the duplicate check uses current data,
   // not whatever happened to be loaded when the screen opened.
@@ -4848,7 +4851,7 @@ async function importPastGuides() {
 // Save a guide with a specific filename into the Drive Reports folder
 async function saveNamedGuideToDrive(name, content) {
   await ensureReportsFolder();
-  const meta = { name, parents: googleAuth.folderId ? [googleAuth.folderId] : undefined };
+  const meta = { name, parents: await guideParents(prettyTopicFromName(name)) };
   const boundary = 'cf_b_' + Date.now();
   const body =
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
