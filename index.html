@@ -4812,77 +4812,73 @@ function forgetRemovedGuide(name) {
    in the topic folder that the app no longer listed but the user still had to look at and
    judge. Patrick's instruction on 2026-08-12 was explicit: deleted means gone, including
    the underlying output. These go permanently, not to the trash. */
-async function deleteRunFiles(mdName, exceptId) {
-  const base = String(mdName || '').replace(/\.md$/i, '');
-  if (!base) return 0;
-  const safe = base.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-  const q = encodeURIComponent("name contains '" + safe + "' and trashed = false");
-  let removed = 0;
+async function driveFileParent(fileId) {
   try {
-    const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)&pageSize=100', {
+    const r = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?fields=parents', {
       headers: { Authorization: 'Bearer ' + googleAuth.token }
     });
-    if (!res.ok) return 0;
-    const j = await res.json();
-    for (const f of (j.files || [])) {
-      if (exceptId && f.id === exceptId) continue;
-      // "contains" is a prefix-ish match, so confirm the name really belongs to THIS run
-      // before deleting anything. A run's files are base.md, base.pdf, base.docx, base.html.
-      if (!/^(.+)\.(md|pdf|docx|html)$/i.test(f.name)) continue;
-      if (f.name.slice(0, base.length).toLowerCase() !== base.toLowerCase()) continue;
-      if (f.name.length !== base.length + 3 && f.name.length !== base.length + 4 && f.name.length !== base.length + 5) continue;
-      const r = await fetch('https://www.googleapis.com/drive/v3/files/' + f.id, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer ' + googleAuth.token }
-      });
-      if (r.ok || r.status === 204) removed++;
-    }
-  } catch (e) { console.warn('run cleanup failed', e); }
-  return removed;
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j.parents && j.parents[0]) || null;
+  } catch (e) { console.warn('could not read parent folder', e); return null; }
 }
 
-/* One current version per topic. When a new guide for a topic is confirmed saved, the
-   older runs of that same topic go, so the folder holds the current guide and nothing the
-   user has to date-check. Only ever called AFTER the new file is safely in Drive. */
-async function supersedeOlderRuns(topic, keepId) {
-  const prefix = slug(topic) + '_';
-  const q = encodeURIComponent("name contains '" + prefix.replace(/'/g, "\\'") + "' and trashed = false");
+/* Clears a topic folder of everything except the files named in keepIds, permanently.
+   Matching on filename was the earlier mistake: it spared anything without a run date,
+   which is exactly the pile of older exports and hand-made copies Patrick has to sift
+   through to work out which is current. The folder is the unit, not the filename.
+   Sub-folders are skipped - deleting one would take its whole contents with it, which is
+   never what emptying a guide folder means. */
+async function emptyTopicFolder(folderId, keepIds) {
+  if (!folderId) return 0;
+  const keep = (keepIds || []).filter(Boolean);
+  const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
   let removed = 0;
   try {
-    const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)&pageSize=200', {
+    const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name,mimeType)&pageSize=200', {
       headers: { Authorization: 'Bearer ' + googleAuth.token }
     });
     if (!res.ok) return 0;
     const j = await res.json();
     for (const f of (j.files || [])) {
-      if (keepId && f.id === keepId) continue;
-      if (f.name.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) continue;
-      if (!/_\d{4}-\d{2}-\d{2}\.(md|pdf|docx|html)$/i.test(f.name)) continue;
+      if (keep.indexOf(f.id) !== -1) continue;
+      if (f.mimeType === 'application/vnd.google-apps.folder') continue;
       const r = await fetch('https://www.googleapis.com/drive/v3/files/' + f.id, {
         method: 'DELETE',
         headers: { Authorization: 'Bearer ' + googleAuth.token }
       });
       if (r.ok || r.status === 204) { removed++; rememberRemovedGuide(f.name); }
     }
-  } catch (e) { console.warn('supersede failed', e); }
+  } catch (e) { console.warn('folder cleanup failed', e); }
   return removed;
 }
 
+/* One current version per topic. Called only AFTER a new guide is confirmed saved, so a
+   failed save can never destroy the version it was meant to replace. */
+async function supersedeOlderRuns(topic, keepId) {
+  let folderId = null;
+  try { folderId = await ensureTopicFolder(topic); } catch (e) { console.warn('no topic folder', e); }
+  if (!folderId && keepId) folderId = await driveFileParent(keepId);
+  return emptyTopicFolder(folderId, [keepId]);
+}
+
 async function deleteGuide(fileId, name) {
-  if (!confirm('Delete this run of "' + prettyTopicFromName(name) + '" permanently?\n\n' +
-      'Every file for this run goes - the guide and its PDF - and they do NOT go to the trash.\n' +
-      'This cannot be undone, and importing will not bring it back.\n\n' +
-      'Other runs of the same topic are left alone.')) return;
+  if (!confirm('Delete "' + prettyTopicFromName(name) + '" permanently?\n\n' +
+      'This empties that guide\'s folder - the guide, its PDF and Word copies, and any older\n' +
+      'versions sitting in there. Files are deleted outright, NOT moved to the trash.\n\n' +
+      'This cannot be undone, and importing will not bring it back.')) return;
   try {
     await ensureToken();
+    // Read the folder BEFORE the file is gone, or there is nothing left to ask.
+    const folderId = await driveFileParent(fileId);
     const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId, {
       method: 'DELETE',
       headers: { Authorization: 'Bearer ' + googleAuth.token }
     });
     if (!res.ok && res.status !== 204) throw new Error('status ' + res.status);
-    // Only after the guide itself is gone, so a failure never leaves the PDF as the sole
-    // survivor of a run the user believes they deleted.
-    await deleteRunFiles(name, fileId);
+    // Only after the guide itself is gone, so a failure never leaves the exports as the
+    // sole survivors of a guide the user believes they deleted.
+    await emptyTopicFolder(folderId, []);
     rememberRemovedGuide(name);
     await loadMyGuides();
   } catch (e) {
