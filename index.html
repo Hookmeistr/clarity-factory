@@ -4777,8 +4777,61 @@ async function rerunGuide(fileId, name) {
   }
 }
 
+/* A deleted run must stay deleted. Import used to compare only against what was
+   currently in the library, so anything the user had removed looked simply "missing" and
+   was restored on the next import. The names removed by hand are remembered here. */
+const CF_REMOVED_KEY = 'cf_removed_guides';
+
+function removedGuides() {
+  try { const v = JSON.parse(localStorage.getItem(CF_REMOVED_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+function wasRemovedByUser(name) {
+  return removedGuides().indexOf(String(name || '').toLowerCase()) !== -1;
+}
+function rememberRemovedGuide(name) {
+  const key = String(name || '').toLowerCase();
+  const list = removedGuides();
+  if (key && list.indexOf(key) === -1) {
+    list.push(key);
+    try { localStorage.setItem(CF_REMOVED_KEY, JSON.stringify(list)); } catch (e) {}
+  }
+}
+function forgetRemovedGuide(name) {
+  const key = String(name || '').toLowerCase();
+  try { localStorage.setItem(CF_REMOVED_KEY, JSON.stringify(removedGuides().filter(x => x !== key))); }
+  catch (e) {}
+}
+
+/* A run is a .md plus the PDF generated beside it, both named from the same base. Removing
+   only the .md left the PDF behind in the topic folder with nothing pointing at it. */
+async function trashCompanionPdf(mdName) {
+  const base = String(mdName || '').replace(/\.md$/i, '');
+  if (!base) return 0;
+  const q = encodeURIComponent("name = '" + base.replace(/'/g, "\\'") + ".pdf' and trashed = false");
+  let removed = 0;
+  try {
+    const res = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)', {
+      headers: { Authorization: 'Bearer ' + googleAuth.token }
+    });
+    if (!res.ok) return 0;
+    const j = await res.json();
+    for (const f of (j.files || [])) {
+      const r = await fetch('https://www.googleapis.com/drive/v3/files/' + f.id, {
+        method: 'PATCH',
+        headers: { Authorization: 'Bearer ' + googleAuth.token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trashed: true })
+      });
+      if (r.ok) removed++;
+    }
+  } catch (e) { console.warn('companion pdf cleanup failed', e); }
+  return removed;
+}
+
 async function deleteGuide(fileId, name) {
-  if (!confirm('Remove "' + prettyTopicFromName(name) + '" from your library?\n\nThis moves the file to your Google Drive trash.')) return;
+  if (!confirm('Remove this run of "' + prettyTopicFromName(name) + '"?\n\n' +
+      'Both files for this run - the guide and its PDF - go to your Google Drive trash.\n' +
+      'Other runs of the same topic are left alone, and this one will not come back if you import.')) return;
   try {
     await ensureToken();
     const res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId, {
@@ -4787,6 +4840,10 @@ async function deleteGuide(fileId, name) {
       body: JSON.stringify({ trashed: true })
     });
     if (!res.ok) throw new Error('status ' + res.status);
+    // Only after the guide itself is gone, so a failure never leaves a stray PDF as the
+    // sole survivor of a run.
+    await trashCompanionPdf(name);
+    rememberRemovedGuide(name);
     await loadMyGuides();
   } catch (e) {
     alert('Could not remove that guide: ' + e.message);
@@ -4794,7 +4851,8 @@ async function deleteGuide(fileId, name) {
 }
 
 // Import the pre-existing guides into the user's Drive library (one-time)
-let lastImportHint = '';   // plain-language reason for the most recent import failure
+let lastImportHint = '';        // plain-language reason for the most recent import failure
+let importOverrideArmed = false; // set when guides were held back; a second click restores them
 
 async function importPastGuides() {
   const btn = document.getElementById('import-btn');
@@ -4816,9 +4874,12 @@ async function importPastGuides() {
   status.style.color = 'var(--text-faint)';
   await loadHistory();
   const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
-  let done = 0, errs = [], skipped = 0;
+  let done = 0, errs = [], skipped = 0, held = [];
   for (const s of seeds) {
     if (existing.indexOf(s.name.toLowerCase()) !== -1) { skipped++; continue; }
+    // A run the user deleted is not "missing" - it is gone on purpose. One more click
+    // brings it back, so the choice is respected without being permanent.
+    if (!importOverrideArmed && wasRemovedByUser(s.name)) { held.push(prettyTopicFromName(s.name)); continue; }
     existing.push(s.name.toLowerCase());
     status.textContent = `Importing ${prettyTopicFromName(s.name)}…`;
     status.style.color = 'var(--text-faint)';
@@ -4829,6 +4890,7 @@ async function importPastGuides() {
       const md = await r.text();
       if (!md || md.length < 100) throw new Error('seed file was empty');
       await saveNamedGuideToDrive(s.name, md);
+      forgetRemovedGuide(s.name);
       done++;
     } catch (e) {
       console.warn('import failed', s.name, e);
@@ -4838,12 +4900,18 @@ async function importPastGuides() {
   if (errs.length) {
     status.textContent = `Imported ${done}. Could not import: ${errs.join(', ')}. ` + (lastImportHint || 'Try again in a moment.');
     status.style.color = 'var(--ember)';
+  } else if (held.length) {
+    status.textContent = `Imported ${done}. Left out because you deleted ${held.length===1?'it':'them'}: ${held.join(', ')}. Click Import again if you want ${held.length===1?'it':'them'} back.`;
+    status.style.color = 'var(--text-faint)';
   } else {
     status.textContent = skipped && !done
       ? `✓ All guides already imported.`
       : `✓ Imported ${done} guide${done===1?'':'s'}${skipped?' (skipped '+skipped+' already there)':''}.`;
     status.style.color = '#6ca';
   }
+  // Arm the override only when something was actually held back, and disarm it as soon as
+  // it has been used, so a later accidental click cannot resurrect anything.
+  importOverrideArmed = held.length > 0;
   btn.disabled = false;
   await loadMyGuides();
 }
