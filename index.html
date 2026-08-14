@@ -4948,39 +4948,104 @@ async function deleteGuide(fileId, name) {
 // Import the pre-existing guides into the user's Drive library (one-time)
 let lastImportHint = '';        // plain-language reason for the most recent import failure
 
-// Add a guide. PROVEN BY SCREENSHOT 2026-08-13: the Google Drive Picker cannot be used for
-// this. Under the drive.file scope the Picker only lists folders and files this app itself
-// created - Patrick opened it and saw exactly two app-made folders, not his own. His guide
-// sits in a folder he made by hand, so the Picker can never show it. Reading the file from
-// the computer works, because Google Drive for desktop mounts his Drive as a drive letter.
-// showOpenFilePicker is used where available: passing a stable id makes Chrome reopen the
-// last folder he used for THIS button, so the Desktop-every-time problem stops after one
-// use. The plain file input is kept only as a fallback for browsers without it. The picker
-// must be opened FIRST, before any await, or the browser discards the click gesture.
+// Add a guide. Opens in the folder Patrick chooses ONCE and never asks again.
+//
+// Why it is built this way. A web page cannot be given a path like
+// G:\My Drive\...\The Clarity Factory\Reports and told to open there - no browser allows a
+// site to name a folder on disk. What IS allowed: the user picks a folder himself, the
+// browser hands back a handle to it, and that handle can be stored and reused forever as the
+// starting point of later file dialogs. So the first click asks him for the folder once, and
+// every click after that opens straight into it. The Google Drive Picker was tried first and
+// cannot do this at all - under drive.file it only ever lists folders this app created,
+// proven by screenshot on 2026-08-13.
+let cfGuidesDir = null;
+
+function cfHandleDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('cf-handles', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('h');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function cfLoadGuidesDir() {
+  try {
+    const db = await cfHandleDb();
+    return await new Promise((resolve, reject) => {
+      const r = db.transaction('h', 'readonly').objectStore('h').get('guidesDir');
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => reject(r.error);
+    });
+  } catch (e) { return null; }
+}
+async function cfSaveGuidesDir(handle) {
+  try {
+    const db = await cfHandleDb();
+    await new Promise((resolve, reject) => {
+      const r = db.transaction('h', 'readwrite').objectStore('h').put(handle, 'guidesDir');
+      r.onsuccess = () => resolve();
+      r.onerror = () => reject(r.error);
+    });
+  } catch (e) { /* a lost preference is not worth failing the add for */ }
+}
+async function cfClearGuidesDir() {
+  cfGuidesDir = null;
+  try {
+    const db = await cfHandleDb();
+    await new Promise(resolve => {
+      const r = db.transaction('h', 'readwrite').objectStore('h').delete('guidesDir');
+      r.onsuccess = () => resolve(); r.onerror = () => resolve();
+    });
+  } catch (e) { /* ignore */ }
+}
+// Warm the stored handle at load so the click handler does not spend its user gesture
+// waiting on the database.
+cfLoadGuidesDir().then(h => { if (h) cfGuidesDir = h; });
+
 async function addGuideFromDrive() {
   const status = document.getElementById('add-guide-status');
   const btn = document.getElementById('add-guide-drive-btn');
   const say = (msg, colour) => { status.textContent = msg; status.style.color = colour || 'var(--text-faint)'; };
+  const cancelled = e => e && (e.name === 'AbortError' || e.name === 'NotAllowedError');
   let file = null;
+
   try {
-    if (window.showOpenFilePicker) {
-      const handles = await window.showOpenFilePicker({
+    if (window.showOpenFilePicker && window.showDirectoryPicker) {
+      if (!cfGuidesDir) {
+        say('First time only: pick the folder your guides live in. It opens there from now on.');
+        const dir = await window.showDirectoryPicker({ id: 'cf-guides-dir', mode: 'read' });
+        if (!dir) { say(''); return; }
+        cfGuidesDir = dir;
+        await cfSaveGuidesDir(dir);
+      }
+      const opts = {
         id: 'cf-add-guide',
-        startIn: 'documents',
         multiple: false,
         types: [{ description: 'Guide file (.md)', accept: { 'text/markdown': ['.md'], 'text/plain': ['.md', '.txt'] } }]
-      });
-      if (!handles || !handles.length) return;
+      };
+      if (cfGuidesDir) opts.startIn = cfGuidesDir;
+      let handles;
+      try {
+        handles = await window.showOpenFilePicker(opts);
+      } catch (inner) {
+        if (cancelled(inner)) { say(''); return; }
+        // A stored folder that no longer resolves must not brick the button.
+        await cfClearGuidesDir();
+        delete opts.startIn;
+        handles = await window.showOpenFilePicker(opts);
+      }
+      if (!handles || !handles.length) { say(''); return; }
       file = await handles[0].getFile();
     } else {
       file = await pickFileWithInput();
     }
   } catch (e) {
-    if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    if (cancelled(e)) { say(''); return; }
     say('Could not open the file chooser: ' + ((e && e.message) || 'unknown error'), 'var(--ember)');
     return;
   }
-  if (!file) return;
+  if (!file) { say(''); return; }
+
   btn.disabled = true;
   try {
     try { await ensureToken(); }
@@ -5012,7 +5077,7 @@ async function addGuideFromDrive() {
   btn.disabled = false;
 }
 
-// Fallback chooser for browsers without showOpenFilePicker. Cannot be told where to open.
+// Fallback chooser for browsers without the folder-handle API. Cannot be aimed anywhere.
 function pickFileWithInput() {
   return new Promise(resolve => {
     const inp = document.createElement('input');
