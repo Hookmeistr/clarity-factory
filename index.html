@@ -4948,71 +4948,86 @@ async function deleteGuide(fileId, name) {
 // Import the pre-existing guides into the user's Drive library (one-time)
 let lastImportHint = '';        // plain-language reason for the most recent import failure
 
-// Add a guide that is already in the user's Google Drive. Added 2026-08-13 because a browser
-// CANNOT be told where to open a computer file dialog - it opened on his Desktop, nowhere
-// near the guide, and no site can change that. The Drive Picker CAN be told where to open,
-// so this starts in his chosen save folder and browses from there. Picking a file through
-// the Picker is also what grants this app access to it under the drive.file scope, which is
-// why the app can read a file it did not create only when it comes through here.
+// Add a guide. PROVEN BY SCREENSHOT 2026-08-13: the Google Drive Picker cannot be used for
+// this. Under the drive.file scope the Picker only lists folders and files this app itself
+// created - Patrick opened it and saw exactly two app-made folders, not his own. His guide
+// sits in a folder he made by hand, so the Picker can never show it. Reading the file from
+// the computer works, because Google Drive for desktop mounts his Drive as a drive letter.
+// showOpenFilePicker is used where available: passing a stable id makes Chrome reopen the
+// last folder he used for THIS button, so the Desktop-every-time problem stops after one
+// use. The plain file input is kept only as a fallback for browsers without it. The picker
+// must be opened FIRST, before any await, or the browser discards the click gesture.
 async function addGuideFromDrive() {
   const status = document.getElementById('add-guide-status');
   const btn = document.getElementById('add-guide-drive-btn');
   const say = (msg, colour) => { status.textContent = msg; status.style.color = colour || 'var(--text-faint)'; };
-  try { await ensureToken(); }
-  catch (e) { say('Please sign in with Google first, then try again.', 'var(--ember)'); return; }
-  try { await loadPicker(); }
-  catch (e) { say('Could not open the Drive browser: ' + e.message, 'var(--ember)'); return; }
-
-  const startAt = (googleAuth && googleAuth.folderId) ? googleAuth.folderId : 'root';
-  const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
-    .setIncludeFolders(true)
-    .setSelectFolderEnabled(false)
-    .setParent(startAt)
-    .setMode(google.picker.DocsViewMode.LIST);
-
-  const picker = new google.picker.PickerBuilder()
-    .setTitle('Pick the guide file to add to your library')
-    .setOAuthToken(googleAuth.token)
-    .setDeveloperKey(PICKER_API_KEY)
-    .setAppId(PICKER_APP_ID)
-    .addView(view)
-    .setCallback(async data => {
-      if (data.action !== google.picker.Action.PICKED) return;
-      const doc = data.docs && data.docs[0];
-      if (!doc) return;
-      btn.disabled = true;
-      try {
-        say('Reading ' + doc.name + '…');
-        const md = await driveDownloadFile(doc.id);
-        if (!md || md.length < 100) throw new Error('That file is empty or too short to be a guide.');
-        if (md.indexOf('## 5.') === -1 && md.toUpperCase().indexOf('MASTER SOURCE') === -1) {
-          throw new Error('That does not look like a Clarity Factory guide. Pick the MASTER_SOURCE .md file.');
-        }
-        let name = (doc.name || 'imported_guide.md').replace(/[\\/:*?"<>|]/g, '_');
-        if (!/\.md$/i.test(name)) name += '.md';
-        await loadHistory();
-        const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
-        if (existing.indexOf(name.toLowerCase()) !== -1) {
-          say('✓ ' + prettyTopicFromName(name) + ' is already in your library.', '#6ca');
-          btn.disabled = false;
-          return;
-        }
-        say('Adding ' + prettyTopicFromName(name) + ' to your library…');
-        await saveNamedGuideToDrive(name, md);
-        forgetRemovedGuide(name);
-        await loadMyGuides();
-        say('✓ Added ' + prettyTopicFromName(name) + ' to your library.', '#6ca');
-      } catch (e) {
-        console.warn('add guide from drive failed', e);
-        say((e && e.message) ? e.message : 'Could not add that file.', 'var(--ember)');
-      }
+  let file = null;
+  try {
+    if (window.showOpenFilePicker) {
+      const handles = await window.showOpenFilePicker({
+        id: 'cf-add-guide',
+        startIn: 'documents',
+        multiple: false,
+        types: [{ description: 'Guide file (.md)', accept: { 'text/markdown': ['.md'], 'text/plain': ['.md', '.txt'] } }]
+      });
+      if (!handles || !handles.length) return;
+      file = await handles[0].getFile();
+    } else {
+      file = await pickFileWithInput();
+    }
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+    say('Could not open the file chooser: ' + ((e && e.message) || 'unknown error'), 'var(--ember)');
+    return;
+  }
+  if (!file) return;
+  btn.disabled = true;
+  try {
+    try { await ensureToken(); }
+    catch (e) { say('Please sign in with Google first, then try again.', 'var(--ember)'); btn.disabled = false; return; }
+    say('Reading ' + file.name + '...');
+    const md = await file.text();
+    if (!md || md.length < 100) throw new Error('That file is empty or too short to be a guide.');
+    if (md.indexOf('## 5.') === -1 && md.toUpperCase().indexOf('MASTER SOURCE') === -1) {
+      throw new Error('That does not look like a Clarity Factory guide. Pick the MASTER_SOURCE .md file.');
+    }
+    let name = (file.name || 'imported_guide.md').replace(/[\\/:*?"<>|]/g, '_');
+    if (!/\.md$/i.test(name)) name += '.md';
+    await loadHistory();
+    const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
+    if (existing.indexOf(name.toLowerCase()) !== -1) {
+      say('That guide is already in your library.', '#6ca');
       btn.disabled = false;
-    })
-    .build();
-
-  picker.setVisible(true);
+      return;
+    }
+    say('Adding ' + prettyTopicFromName(name) + ' to your library...');
+    await saveNamedGuideToDrive(name, md);
+    forgetRemovedGuide(name);
+    await loadMyGuides();
+    say('Added ' + prettyTopicFromName(name) + ' to your library.', '#6ca');
+  } catch (e) {
+    console.warn('add guide failed', e);
+    say((e && e.message) ? e.message : 'Could not add that file.', 'var(--ember)');
+  }
+  btn.disabled = false;
 }
 
+// Fallback chooser for browsers without showOpenFilePicker. Cannot be told where to open.
+function pickFileWithInput() {
+  return new Promise(resolve => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.md,text/markdown,text/plain';
+    inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', () => {
+      const f = inp.files && inp.files[0];
+      document.body.removeChild(inp);
+      resolve(f || null);
+    });
+    inp.click();
+  });
+}
 async function importPastGuides() {
   const btn = document.getElementById('import-btn');
   const status = document.getElementById('import-status');
