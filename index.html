@@ -4244,9 +4244,15 @@ async function saveGuideToDrive() {
     if (res.ok) {
       let saved = null;
       try { saved = await res.json(); } catch (e) {}
-      const gone = await supersedeOlderRuns(G.topic, saved && saved.id);
+      // When the preservation audit reported losses, the PREVIOUS version is the user's only
+      // complete copy, and the audit tells him so in the same breath ("your previous file is
+      // still in Drive and was not overwritten"). Superseding deleted it anyway, which made
+      // that promise false at the exact moment it mattered. Verified 2026-08-13: after a
+      // lossy refine the topic folder held exactly one file. Losses mean keep everything.
+      const gone = G.refineLosses ? 0 : await supersedeOlderRuns(G.topic, saved && saved.id);
       driveStatus(true, 'Saved to your Google Drive, in ' + topicFolderName(G.topic) + '.' +
-        (gone ? ' This is now the only version of this guide there - ' + gone + ' older file' + (gone === 1 ? '' : 's') + ' removed.' : ''));
+        (gone ? ' This is now the only version of this guide there - ' + gone + ' older file' + (gone === 1 ? '' : 's') + ' removed.'
+              : (G.refineLosses ? ' The previous version has been KEPT alongside this one, because this refine lost content.' : '')));
       return true;
     }
     driveStatus(false, 'NOT saved to your Drive. Download the .md above - right now that is the only copy. ' + driveErrorHint(res.status));
