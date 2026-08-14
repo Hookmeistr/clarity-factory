@@ -2700,7 +2700,10 @@ function dlMarkdown() {
   const blob = new Blob([G.masterSource], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `MASTER_SOURCE_${slug(G.topic)}.md`; a.click();
+  // Named for the topic, not for what the file is internally. Patrick 2026-08-13: the
+  // MASTER_SOURCE_ prefix buried every guide under the same word in a sorted folder.
+  // Matches the .html / .docx / .pdf exports, which have always been topic_date.
+  a.href = url; a.download = `${slug(G.topic)}_${new Date().toISOString().slice(0, 10)}.md`; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -5057,6 +5060,9 @@ async function addGuideFromDrive() {
       throw new Error('That does not look like a Clarity Factory guide. Pick the MASTER_SOURCE .md file.');
     }
     let name = (file.name || 'imported_guide.md').replace(/[\\/:*?"<>|]/g, '_');
+    // Older downloads carry a MASTER_SOURCE_ prefix. The library shows the topic, not the
+    // file's internal role, so strip it on the way in as well as on the way out.
+    name = name.replace(/^MASTER_SOURCE[_-]+/i, '');
     if (!/\.md$/i.test(name)) name += '.md';
     await loadHistory();
     const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
