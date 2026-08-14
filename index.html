@@ -1133,11 +1133,9 @@
 
     <div id="guides-add-row" style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);">
       <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.6rem;">
-        Have a guide that isn't listed below? Add it here and it joins your library, ready to open and re-run. Nothing is published anywhere — it stays in your own Google Drive. Use the Drive button if the guide is already in Drive; it opens in your save folder and browses from there.
+        Have a guide that isn't listed below? Add it here and it joins your library, ready to open and re-run.
       </p>
-      <input type="file" id="add-guide-file" accept=".md,text/markdown,text/plain" style="display:none;" onchange="addGuideFromFile(this)">
-      <button class="btn" onclick="addGuideFromDrive()" id="add-guide-drive-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">➕ Add a guide from my Google Drive</button>
-      <button class="btn" onclick="document.getElementById('add-guide-file').click()" id="add-guide-btn" style="margin-top:0;margin-left:0.5rem;font-size:0.9rem;padding:0.5rem 1rem;">➕ Add from this computer</button>
+      <button class="btn" onclick="addGuideFromDrive()" id="add-guide-drive-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">➕ Add a guide</button>
       <span id="add-guide-status" style="font-family:var(--ff-mono);font-size:0.84rem;margin-left:0.75rem;color:var(--text-faint);"></span>
     </div>
 
@@ -5013,50 +5011,6 @@ async function addGuideFromDrive() {
     .build();
 
   picker.setVisible(true);
-}
-
-// Add a guide the user already has on disk. Added 2026-08-13 after a finished run could not
-// be got back into My Guides: the app sees Drive under drive.file, so a file the user saved
-// by hand is invisible to it, and the only other route was publishing the guide text to the
-// public repo, which he refused and was right to refuse. Reading the file through a file
-// input and saving it with the app's own writer makes it an app-created file, so it appears
-// in My Guides like any other. No new permission, nothing leaves his machine except into his
-// own Drive.
-async function addGuideFromFile(input) {
-  const status = document.getElementById('add-guide-status');
-  const btn = document.getElementById('add-guide-btn');
-  const file = input && input.files && input.files[0];
-  input.value = '';
-  if (!file) return;
-  const say = (msg, colour) => { status.textContent = msg; status.style.color = colour || 'var(--text-faint)'; };
-  try { await ensureToken(); }
-  catch (e) { say('Please sign in with Google first, then try again.', 'var(--ember)'); return; }
-  btn.disabled = true;
-  try {
-    say('Reading ' + file.name + '…');
-    const md = await file.text();
-    if (!md || md.length < 100) throw new Error('That file is empty or too short to be a guide.');
-    if (md.indexOf('## 5.') === -1 && md.toUpperCase().indexOf('MASTER SOURCE') === -1) {
-      throw new Error('That does not look like a Clarity Factory guide. Pick the MASTER_SOURCE .md file.');
-    }
-    let name = (file.name || 'imported_guide.md').replace(/[\\/:*?"<>|]/g, '_');
-    if (!/\.md$/i.test(name)) name += '.md';
-    await loadHistory();
-    const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
-    if (existing.indexOf(name.toLowerCase()) !== -1) {
-      const stamp = new Date().toISOString().slice(0, 10);
-      name = name.replace(/\.md$/i, '') + '_added_' + stamp + '.md';
-    }
-    say('Saving ' + prettyTopicFromName(name) + ' to your Drive…');
-    await saveNamedGuideToDrive(name, md);
-    forgetRemovedGuide(name);
-    await loadMyGuides();
-    say('✓ Added ' + prettyTopicFromName(name) + ' to your library.', '#6ca');
-  } catch (e) {
-    console.warn('add guide failed', e);
-    say((e && e.message) ? e.message : 'Could not add that file.', 'var(--ember)');
-  }
-  btn.disabled = false;
 }
 
 async function importPastGuides() {
