@@ -1378,9 +1378,38 @@ HORIZONTAL: Run scan queries to find new entrants, discontinued products, new ca
 [One bullet per brand]
 
 ## 5. DATA — PRODUCTS / MODELS
-> Schema: Brand | Model | MSRP | key specs | grades | notes | verified YYYY-MM-DD
+[A REAL MARKDOWN TABLE. Never bullets. One table per category, each under a bold
+sub-heading naming the category. Every row carries a price and a link - see PRODUCT TABLE
+RULES below.]
 
-[One bullet per model]
+**[Category name]**
+
+| Brand | Model | Price | Key specs | Grade | Notes | Link | Verified |
+|---|---|---|---|---|---|---|---|
+| [brand] | [model] | [$ price] | [specs] | [grade] | [notes] | [direct product page URL] | [YYYY-MM-DD] |
+
+[Then, after the product tables, one pros/cons table per category:]
+
+**Pros and cons - [Category name]**
+
+| Model | Pros | Cons |
+|---|---|---|
+| [model] | [2-4 short pros, semicolon separated] | [2-4 short cons, semicolon separated] |
+
+PRODUCT TABLE RULES - these are not optional and a guide that breaks them is incomplete:
+- Section 5 is ALWAYS a markdown table, never a bullet list. The user reads this on screen,
+  in PDF and in Word; a pipe-separated bullet renders as one unreadable run-on line.
+- EVERY product row carries a Price. If no price is published, write "Not published -
+  contact to order" or "Sold out at time of check" and say which. Never leave it blank and
+  never omit the column.
+- EVERY product row carries a Link in its own column, and it is a direct product page on
+  the maker's or a named retailer's site under the URL rules above - not a homepage, not a
+  search results page. If no direct page exists, write "No direct page found" rather than
+  substituting a search URL.
+- Keep every cell short enough to read across the page. Long explanation belongs in the
+  notes column as a clipped phrase, or in section 7, not in a cell that forces horizontal
+  scrolling.
+- Every category that has products gets BOTH a product table and a pros/cons table.
 
 ## 6. DATA — CONSUMABLES / ACCESSORIES
 [If applicable. Omit header if not.]
@@ -1530,6 +1559,12 @@ Your job:
    than guessing at its contents or quietly working around the gap.
 10. Apply the BRAND LINE-UP COMPLETENESS and RETAILER SWEEP rules above to any brand that
     enters or stays in the top 5 as a result of this refine.
+
+The PRODUCT TABLE RULES above apply in full if you return section 5: it comes back as a
+markdown table with a Price column and a Link column on every row, plus its pros/cons
+table, even if the version you were given was an older bullet-style section. Converting an
+old bullet section to the table format is an improvement, not a shrink, provided no product
+is dropped - carry every one across.
 
 The URL rules above apply in full to every link you emit, and the REQUIREMENT TIERS
 ranking rules above apply in full to the re-ranked top 5. If the refinement request
@@ -2697,13 +2732,29 @@ function dlExcel() {
 }
 
 function parseProductSheet(src) {
-  const rows = [['Brand','Model','MSRP / Price','Key Specs','Overall Grade','Notes','Verified']];
+  // Handles BOTH shapes: the current markdown product table (Price + Link columns) and the
+  // legacy "- Brand | Model | ..." bullet used by guides built before 2026-08-13. Pros/cons
+  // tables share section 5, so table rows are only taken while a product header is in force.
+  const rows = [['Brand','Model','Price','Key Specs','Grade','Notes','Link','Verified']];
   const sec = extractSection(src, '## 5.', '## 6.');
   if (!sec) return rows;
-  for (const line of sec.split('\n')) {
+  let mode = 'product';
+  for (const raw of sec.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('|')) {
+      if (/^\|[\s\-:|]+\|$/.test(line)) continue;
+      const c = line.replace(/^\|/,'').replace(/\|$/,'').split('|').map(s => s.replace(/\*\*/g,'').trim());
+      const joined = c.join(' ').toLowerCase();
+      if (joined.includes('pros') && joined.includes('cons')) { mode = 'skip'; continue; }
+      if (joined.includes('brand') && joined.includes('model')) { mode = 'product'; continue; }
+      if (mode !== 'product' || c.length < 3) continue;
+      rows.push([c[0]||'',c[1]||'',c[2]||'',c[3]||'',c[4]||'',c[5]||'',c[6]||'',c[c.length-1]||'']);
+      continue;
+    }
     if (!line.startsWith('- ')) continue;
+    mode = 'product';
     const p = line.slice(2).split(' | ');
-    if (p.length >= 2) rows.push([p[0]?.replace(/\*\*/g,'').trim()||'',p[1]?.trim()||'',p[2]?.trim()||'',p[3]?.trim()||'',p[4]?.trim()||'',p[5]?.trim()||'',p[p.length-1]?.trim()||'']);
+    if (p.length >= 2) rows.push([p[0]?.replace(/\*\*/g,'').trim()||'',p[1]?.trim()||'',p[2]?.trim()||'',p[3]?.trim()||'',p[4]?.trim()||'',p[5]?.trim()||'','',p[p.length-1]?.trim()||'']);
   }
   return rows;
 }
