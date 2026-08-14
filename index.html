@@ -1133,10 +1133,11 @@
 
     <div id="guides-add-row" style="margin-bottom:1.25rem;padding:0.9rem 1rem;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--ember-lo);border-radius:var(--r);">
       <p style="font-size:0.9rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.6rem;">
-        Have a guide saved on this computer that isn't listed below? Add it here and it joins your library, ready to open and re-run. Nothing is published anywhere — it goes straight into your own Google Drive.
+        Have a guide that isn't listed below? Add it here and it joins your library, ready to open and re-run. Nothing is published anywhere — it stays in your own Google Drive. Use the Drive button if the guide is already in Drive; it opens in your save folder and browses from there.
       </p>
       <input type="file" id="add-guide-file" accept=".md,text/markdown,text/plain" style="display:none;" onchange="addGuideFromFile(this)">
-      <button class="btn" onclick="document.getElementById('add-guide-file').click()" id="add-guide-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">➕ Add a guide from this computer</button>
+      <button class="btn" onclick="addGuideFromDrive()" id="add-guide-drive-btn" style="margin-top:0;font-size:0.9rem;padding:0.5rem 1rem;">➕ Add a guide from my Google Drive</button>
+      <button class="btn" onclick="document.getElementById('add-guide-file').click()" id="add-guide-btn" style="margin-top:0;margin-left:0.5rem;font-size:0.9rem;padding:0.5rem 1rem;">➕ Add from this computer</button>
       <span id="add-guide-status" style="font-family:var(--ff-mono);font-size:0.84rem;margin-left:0.75rem;color:var(--text-faint);"></span>
     </div>
 
@@ -4948,6 +4949,71 @@ async function deleteGuide(fileId, name) {
 
 // Import the pre-existing guides into the user's Drive library (one-time)
 let lastImportHint = '';        // plain-language reason for the most recent import failure
+
+// Add a guide that is already in the user's Google Drive. Added 2026-08-13 because a browser
+// CANNOT be told where to open a computer file dialog - it opened on his Desktop, nowhere
+// near the guide, and no site can change that. The Drive Picker CAN be told where to open,
+// so this starts in his chosen save folder and browses from there. Picking a file through
+// the Picker is also what grants this app access to it under the drive.file scope, which is
+// why the app can read a file it did not create only when it comes through here.
+async function addGuideFromDrive() {
+  const status = document.getElementById('add-guide-status');
+  const btn = document.getElementById('add-guide-drive-btn');
+  const say = (msg, colour) => { status.textContent = msg; status.style.color = colour || 'var(--text-faint)'; };
+  try { await ensureToken(); }
+  catch (e) { say('Please sign in with Google first, then try again.', 'var(--ember)'); return; }
+  try { await loadPicker(); }
+  catch (e) { say('Could not open the Drive browser: ' + e.message, 'var(--ember)'); return; }
+
+  const startAt = (googleAuth && googleAuth.folderId) ? googleAuth.folderId : 'root';
+  const view = new google.picker.DocsView(google.picker.ViewId.DOCS)
+    .setIncludeFolders(true)
+    .setSelectFolderEnabled(false)
+    .setParent(startAt)
+    .setMode(google.picker.DocsViewMode.LIST);
+
+  const picker = new google.picker.PickerBuilder()
+    .setTitle('Pick the guide file to add to your library')
+    .setOAuthToken(googleAuth.token)
+    .setDeveloperKey(PICKER_API_KEY)
+    .setAppId(PICKER_APP_ID)
+    .addView(view)
+    .setCallback(async data => {
+      if (data.action !== google.picker.Action.PICKED) return;
+      const doc = data.docs && data.docs[0];
+      if (!doc) return;
+      btn.disabled = true;
+      try {
+        say('Reading ' + doc.name + '…');
+        const md = await driveDownloadFile(doc.id);
+        if (!md || md.length < 100) throw new Error('That file is empty or too short to be a guide.');
+        if (md.indexOf('## 5.') === -1 && md.toUpperCase().indexOf('MASTER SOURCE') === -1) {
+          throw new Error('That does not look like a Clarity Factory guide. Pick the MASTER_SOURCE .md file.');
+        }
+        let name = (doc.name || 'imported_guide.md').replace(/[\\/:*?"<>|]/g, '_');
+        if (!/\.md$/i.test(name)) name += '.md';
+        await loadHistory();
+        const existing = (G.history || []).map(f => (f.name || '').toLowerCase());
+        if (existing.indexOf(name.toLowerCase()) !== -1) {
+          say('✓ ' + prettyTopicFromName(name) + ' is already in your library.', '#6ca');
+          btn.disabled = false;
+          return;
+        }
+        say('Adding ' + prettyTopicFromName(name) + ' to your library…');
+        await saveNamedGuideToDrive(name, md);
+        forgetRemovedGuide(name);
+        await loadMyGuides();
+        say('✓ Added ' + prettyTopicFromName(name) + ' to your library.', '#6ca');
+      } catch (e) {
+        console.warn('add guide from drive failed', e);
+        say((e && e.message) ? e.message : 'Could not add that file.', 'var(--ember)');
+      }
+      btn.disabled = false;
+    })
+    .build();
+
+  picker.setVisible(true);
+}
 
 // Add a guide the user already has on disk. Added 2026-08-13 after a finished run could not
 // be got back into My Guides: the app sees Drive under drive.file, so a file the user saved
