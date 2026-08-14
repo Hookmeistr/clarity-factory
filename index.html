@@ -4318,6 +4318,11 @@ function renderHistoryButton() {
 
 // ── MY GUIDES LIBRARY ──
 function prettyTopicFromName(name) {
+  // Guides added to the library before 2026-08-13 carry a MASTER_SOURCE_ prefix in their
+  // filename, and the guide TITLE is derived from that filename. Without this, the words
+  // leak into the on-screen title, the refine header, every export filename and the Drive
+  // folder name. Stripped here because this is the single place a filename becomes a topic.
+  name = String(name || '').replace(/^master[ _-]?source[ _-]+/i, '');
   return name.replace(/\.md$/i, '').replace(/_\d{4}-\d{2}-\d{2}$/, '').replace(/_/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase());
 }
